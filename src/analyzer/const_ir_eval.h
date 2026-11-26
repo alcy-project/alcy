@@ -18,46 +18,20 @@
 
 namespace analyzer {
 
-// The data an emitter needs to resolve checked tables. The resolvers
-// are concrete objects whose bodies call `CompEval` directly: no captured
-// lambdas, no hidden evaluator state. `site` changes when a comp callee
-// in another module is inlined.
+// The data an emitter needs to resolve checked tables. Every resolver is
+// a member function over the explicit `EvalSite`; `site` changes when a
+// comp callee in another module is inlined.
 struct EmitContext {
   CompEval& evaluator;
   comp::CompScope& scope;
   EvalSite site;
 
-  struct ExprType {
-    const EmitContext& ctx;
-    ir::TypeIdx operator()(ast::ExprIdx expr) const;
-  };
-  struct LayoutType {
-    const EmitContext& ctx;
-    ir::TypeIdx operator()(ast::ExprIdx expr) const;
-  };
-  struct PathValue {
-    const EmitContext& ctx;
-    bool operator()(ast::PathIdx path, comp::CompVal& out) const;
-  };
-  struct CompFn {
-    const EmitContext& ctx;
-    bool operator()(ast::ExprIdx call, CompFnInfo& info) const;
-  };
-  struct FieldIndex {
-    const EmitContext& ctx;
-    bool operator()(ir::TypeIdx type, std::string_view name, u32& index) const;
-  };
-  struct VariantIndex {
-    const EmitContext& ctx;
-    bool operator()(ir::TypeIdx type, std::string_view name, u32& index) const;
-  };
-
-  ExprType expr_type{*this};
-  LayoutType resolve_layout_type{*this};
-  PathValue resolve_path{*this};
-  CompFn resolve_comp_fn{*this};
-  FieldIndex resolve_field_index{*this};
-  VariantIndex resolve_variant_index{*this};
+  ir::TypeIdx type_of(ast::ExprIdx expr) const;
+  ir::TypeIdx layout_type_of(ast::ExprIdx expr) const;
+  bool path_value(ast::PathIdx path, comp::CompVal& out) const;
+  bool comp_fn(ast::ExprIdx call, CompFnInfo& info) const;
+  bool field_index(ir::TypeIdx type, std::string_view name, u32& index) const;
+  bool variant_index(ir::TypeIdx type, std::string_view name, u32& index) const;
 
   EmitContext(CompEval& evaluator_in,
               comp::CompScope& scope_in,

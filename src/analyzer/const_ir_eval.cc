@@ -45,38 +45,33 @@ EmitContext EmitContext::with_site(EvalSite next) const {
   return EmitContext(evaluator, scope, next);
 }
 
-ir::TypeIdx EmitContext::ExprType::operator()(ast::ExprIdx expr) const {
-  return ctx.evaluator.type_of(ctx.site, expr);
+ir::TypeIdx EmitContext::type_of(ast::ExprIdx expr) const {
+  return evaluator.type_of(site, expr);
 }
 
-ir::TypeIdx EmitContext::LayoutType::operator()(ast::ExprIdx expr) const {
-  return ctx.evaluator.layout_type_of(ctx.site, expr);
+ir::TypeIdx EmitContext::layout_type_of(ast::ExprIdx expr) const {
+  return evaluator.layout_type_of(site, expr);
 }
 
-bool EmitContext::PathValue::operator()(ast::PathIdx path,
-                                        comp::CompVal& out) const {
-  return ctx.evaluator.path_value(ctx.site, ctx.scope, path, out);
+bool EmitContext::path_value(ast::PathIdx path, comp::CompVal& out) const {
+  return evaluator.path_value(site, scope, path, out);
 }
 
-bool EmitContext::CompFn::operator()(ast::ExprIdx call,
-                                     CompFnInfo& info) const {
-  return ctx.evaluator.comp_fn(ctx.site, call, info);
+bool EmitContext::comp_fn(ast::ExprIdx call, CompFnInfo& info) const {
+  return evaluator.comp_fn(site, call, info);
 }
 
-bool EmitContext::FieldIndex::operator()(ir::TypeIdx type,
-                                         std::string_view name,
-                                         u32& index) const {
-  return ctx.evaluator.field_index(type, name, index);
+bool EmitContext::field_index(ir::TypeIdx type,
+                              std::string_view name,
+                              u32& index) const {
+  return evaluator.field_index(type, name, index);
 }
 
-bool EmitContext::VariantIndex::operator()(ir::TypeIdx type,
-                                           std::string_view name,
-                                           u32& index) const {
-  return ctx.evaluator.variant_index(type, name, index);
+bool EmitContext::variant_index(ir::TypeIdx type,
+                                std::string_view name,
+                                u32& index) const {
+  return evaluator.variant_index(type, name, index);
 }
-namespace {
-
-using ExprTypeFn = EmitContext::ExprType;
 using ParamEnv = std::vector<std::pair<std::string_view, ir::OperandIdx>>;
 
 constexpr usize COMP_MAX_UNROLL = 4096;
@@ -324,7 +319,7 @@ class ConstEmitter {
   bool resolve_variant_index(ir::TypeIdx type,
                              std::string_view name,
                              u32& idx) const {
-    return context_->resolve_variant_index(type, name, idx);
+    return context_->variant_index(type, name, idx);
   }
 
   static constexpr u32 MAX_INLINE_DEPTH = comp::COMP_MAX_CALL_DEPTH;
@@ -481,6 +476,8 @@ class ConstEmitter {
   ir::BlockIdx continue_target_ = ir::BlockIdx(base::INVALID_IDX);
 };
 
+namespace {
+
 ir::OperandIdx emit_expr(const ast::AstArena& ast,
                          ast::ExprIdx expr,
                          ir::TypeIdx type,
@@ -498,14 +495,12 @@ static bool operand_int(ConstEmitter& emitter, ir::OperandIdx op, u64& out);
 
 // Resolves a reassign place naming a semantic binding to the binding's
 // name and the chain of struct/tuple child indices for the written slot.
-static bool semantic_place_path(
-    const ast::AstArena& ast,
-    ast::ExprIdx place,
-    std::string_view& root_name,
-    std::vector<u32>& indices,
-    const ExprTypeFn& expr_type,
-    ConstEmitter& emitter,
-    const EmitContext::FieldIndex& resolve_field_index) {
+static bool semantic_place_path(const ast::AstArena& ast,
+                                ast::ExprIdx place,
+                                std::string_view& root_name,
+                                std::vector<u32>& indices,
+                                const EmitContext& ctx,
+                                ConstEmitter& emitter) {
   const ast::ExprNode& node = ast.exprs[place];
   if (node.kind == ast::ExprKind::Path) {
     const auto& segs =
@@ -518,11 +513,11 @@ static bool semantic_place_path(
   }
   if (node.kind == ast::ExprKind::Field) {
     const ast::ExprField& field = node.payload.get<ast::ExprField>();
-    if (!semantic_place_path(ast, field.receiver, root_name, indices, expr_type,
-                             emitter, resolve_field_index)) {
+    if (!semantic_place_path(ast, field.receiver, root_name, indices, ctx,
+                             emitter)) {
       return false;
     }
-    ir::TypeIdx recv_ty = expr_type(field.receiver);
+    ir::TypeIdx recv_ty = ctx.type_of(field.receiver);
     const ir::TypeTag recv_tag = emitter.builder().state().types[recv_ty].tag;
     if (recv_tag == ir::TypeTag::Ref || recv_tag == ir::TypeTag::MutRef) {
       recv_ty =
@@ -532,7 +527,7 @@ static bool semantic_place_path(
               .pointee;
     }
     u32 index = 0;
-    if (!resolve_field_index(recv_ty, field.name.name, index)) {
+    if (!ctx.field_index(recv_ty, field.name.name, index)) {
       std::string_view numeric = field.name.name;
       u32 parsed = 0;
       bool all_digits = !numeric.empty();
@@ -553,8 +548,8 @@ static bool semantic_place_path(
   }
   if (node.kind == ast::ExprKind::Index) {
     const ast::ExprIndex& idx = node.payload.get<ast::ExprIndex>();
-    if (!semantic_place_path(ast, idx.receiver, root_name, indices, expr_type,
-                             emitter, resolve_field_index)) {
+    if (!semantic_place_path(ast, idx.receiver, root_name, indices, ctx,
+                             emitter)) {
       return false;
     }
     const ast::ExprNode& index_node = ast.exprs[idx.index];
@@ -651,7 +646,7 @@ static ir::OperandIdx emit_place_address(const ast::AstArena& ast,
       if (!digits) {
         return ir::OperandIdx(base::INVALID_IDX);
       }
-    } else if (!ctx.resolve_field_index(base_type, field.name.name, index)) {
+    } else if (!ctx.field_index(base_type, field.name.name, index)) {
       return ir::OperandIdx(base::INVALID_IDX);
     }
     const ir::TypeTag tag = emitter.builder().state().types[base_type].tag;
@@ -673,7 +668,7 @@ static ir::OperandIdx emit_place_address(const ast::AstArena& ast,
   } else {
     const ast::ExprIndex& access = node.payload.get<ast::ExprIndex>();
     const ir::OperandIdx position = emit_expr(
-        ast, access.index, ctx.expr_type(access.index), emitter, ctx, params);
+        ast, access.index, ctx.type_of(access.index), emitter, ctx, params);
     u64 value = 0;
     if (!position.is_valid() || !operand_int(emitter, position, value)) {
       return ir::OperandIdx(base::INVALID_IDX);
@@ -722,15 +717,6 @@ ir::OperandIdx emit_block(const ast::AstArena& ast,
                           ConstEmitter& emitter,
                           const EmitContext& ctx,
                           const ParamEnv* params) {
-  [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
-      ctx.resolve_path;
-  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
-      ctx.resolve_layout_type;
-  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
-      ctx.resolve_comp_fn;
-  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
-      ctx.resolve_field_index;
   if (block.statements.size() == 1 && block.value.is_valid()) {
     const ast::StmtNode& stmt = ast.stmts[block.statements[0]];
     if (stmt.kind == ast::StmtKind::Decl &&
@@ -757,7 +743,7 @@ ir::OperandIdx emit_block(const ast::AstArena& ast,
         emitter.restore_locals(saved_locals);
         return ir::OperandIdx(base::INVALID_IDX);
       }
-      const ir::TypeIdx binding_type = expr_type(decl.init);
+      const ir::TypeIdx binding_type = ctx.type_of(decl.init);
       const ir::OperandIdx init =
           emit_expr(ast, decl.init, binding_type, emitter, ctx, params);
       if (!init.is_valid()) {
@@ -820,8 +806,8 @@ ir::OperandIdx emit_block(const ast::AstArena& ast,
       {
         std::string_view root_name;
         std::vector<u32> indices;
-        if (semantic_place_path(ast, reassign.place, root_name, indices,
-                                expr_type, emitter, resolve_field_index)) {
+        if (semantic_place_path(ast, reassign.place, root_name, indices, ctx,
+                                emitter)) {
           ir::OperandIdx root_op = emitter.lookup_value(root_name);
           if (!root_op.is_valid() && params != nullptr) {
             for (const auto& [name, operand] : *params) {
@@ -840,7 +826,7 @@ ir::OperandIdx emit_block(const ast::AstArena& ast,
             }
           }
           if (is_semantic_root) {
-            const ir::TypeIdx value_ty = expr_type(reassign.value);
+            const ir::TypeIdx value_ty = ctx.type_of(reassign.value);
             const ir::OperandIdx value_op =
                 emit_expr(ast, reassign.value, value_ty, emitter, ctx, params);
             if (!value_op.is_valid()) {
@@ -985,8 +971,9 @@ ir::OperandIdx emit_block(const ast::AstArena& ast,
         emitter.restore_locals(saved_locals);
         return ir::OperandIdx(base::INVALID_IDX);
       }
-      ir::OperandIdx value = emit_expr(
-          ast, reassign.value, expr_type(reassign.value), emitter, ctx, params);
+      ir::OperandIdx value =
+          emit_expr(ast, reassign.value, ctx.type_of(reassign.value), emitter,
+                    ctx, params);
       if (!value.is_valid()) {
         emitter.restore_locals(saved_locals);
         return ir::OperandIdx(base::INVALID_IDX);
@@ -995,15 +982,15 @@ ir::OperandIdx emit_block(const ast::AstArena& ast,
         if (sem->value.tag == comp::CompValue::Tag::Int ||
             sem->value.tag == comp::CompValue::Tag::Bool) {
           const ir::TypeTag tag =
-              emitter.builder().state().types[expr_type(reassign.value)].tag;
+              emitter.builder().state().types[ctx.type_of(reassign.value)].tag;
           const u64 bits = sem->value.tag == comp::CompValue::Tag::Bool
                                ? (sem->value.bool_value ? 1u : 0u)
                                : sem->value.int_value;
           const ir::ImmutableIdx imm = emitter.builder().immutable(
-              {.type = expr_type(reassign.value),
+              {.type = ctx.type_of(reassign.value),
                .data = {.u64_value = bits & comp::mask(tag)}});
           value = emitter.builder().operand(
-              ir::Operand::from_immutable(imm, expr_type(reassign.value)));
+              ir::Operand::from_immutable(imm, ctx.type_of(reassign.value)));
         }
       }
       if (reassign.compound) {
@@ -1101,8 +1088,8 @@ ir::OperandIdx emit_block(const ast::AstArena& ast,
         emitter.restore_locals(saved_locals);
         return ir::OperandIdx(base::INVALID_IDX);
       }
-      if (!emit_expr(ast, expr_stmt.value, expr_type(expr_stmt.value), emitter,
-                     ctx, params)
+      if (!emit_expr(ast, expr_stmt.value, ctx.type_of(expr_stmt.value),
+                     emitter, ctx, params)
                .is_valid()) {
         emitter.restore_locals(saved_locals);
         return ir::OperandIdx(base::INVALID_IDX);
@@ -1128,15 +1115,6 @@ ir::OperandIdx emit_range(const ast::AstArena& ast,
                           ConstEmitter& emitter,
                           const EmitContext& ctx,
                           const ParamEnv* params) {
-  [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
-      ctx.resolve_path;
-  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
-      ctx.resolve_layout_type;
-  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
-      ctx.resolve_comp_fn;
-  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
-      ctx.resolve_field_index;
   const ir::TypeTag range_tag = emitter.builder().state().types[type].tag;
   if (range_tag != ir::TypeTag::Struct) {
     return ir::OperandIdx(base::INVALID_IDX);
@@ -1269,15 +1247,6 @@ ir::OperandIdx emit_pattern_if(const ast::AstArena& ast,
                                ConstEmitter& emitter,
                                const EmitContext& ctx,
                                const ParamEnv* params) {
-  [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
-      ctx.resolve_path;
-  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
-      ctx.resolve_layout_type;
-  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
-      ctx.resolve_comp_fn;
-  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
-      ctx.resolve_field_index;
   if (!if_node.else_block.is_valid() &&
       emitter.builder().state().types[type].tag != ir::TypeTag::Void) {
     return ir::OperandIdx(base::INVALID_IDX);
@@ -1292,7 +1261,7 @@ ir::OperandIdx emit_pattern_if(const ast::AstArena& ast,
       !cond.init.is_valid()) {
     return ir::OperandIdx(base::INVALID_IDX);
   }
-  const ir::TypeIdx init_type = expr_type(cond.init);
+  const ir::TypeIdx init_type = ctx.type_of(cond.init);
   if (emitter.builder().state().types[init_type].tag != ir::TypeTag::Enum) {
     return ir::OperandIdx(base::INVALID_IDX);
   }
@@ -1565,15 +1534,6 @@ ir::OperandIdx emit_str_intrinsic(const ast::AstArena& ast,
                                   ConstEmitter& emitter,
                                   const EmitContext& ctx,
                                   const ParamEnv* params) {
-  [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
-      ctx.resolve_path;
-  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
-      ctx.resolve_layout_type;
-  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
-      ctx.resolve_comp_fn;
-  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
-      ctx.resolve_field_index;
   if (cname == "str_len" || cname == "str_byte" || cname == "str_slice") {
     if ((cname == "str_len" && call.args.size() != 1) ||
         (cname == "str_byte" && call.args.size() != 2) ||
@@ -1581,7 +1541,7 @@ ir::OperandIdx emit_str_intrinsic(const ast::AstArena& ast,
       return ir::OperandIdx(base::INVALID_IDX);
     }
     const ir::OperandIdx receiver = emit_expr(
-        ast, call.args[0], expr_type(call.args[0]), emitter, ctx, params);
+        ast, call.args[0], ctx.type_of(call.args[0]), emitter, ctx, params);
     if (!receiver.is_valid()) {
       return ir::OperandIdx(base::INVALID_IDX);
     }
@@ -1614,7 +1574,7 @@ ir::OperandIdx emit_str_intrinsic(const ast::AstArena& ast,
       return emitter.builder().operand(ir::Operand::from_immutable(imm, type));
     }
     const ir::OperandIdx first = emit_expr(
-        ast, call.args[1], expr_type(call.args[1]), emitter, ctx, params);
+        ast, call.args[1], ctx.type_of(call.args[1]), emitter, ctx, params);
     if (!first.is_valid()) {
       return ir::OperandIdx(base::INVALID_IDX);
     }
@@ -1642,7 +1602,7 @@ ir::OperandIdx emit_str_intrinsic(const ast::AstArena& ast,
       }
       if (cname == "str_slice") {
         const ir::OperandIdx second = emit_expr(
-            ast, call.args[2], expr_type(call.args[2]), emitter, ctx, params);
+            ast, call.args[2], ctx.type_of(call.args[2]), emitter, ctx, params);
         if (!second.is_valid()) {
           return ir::OperandIdx(base::INVALID_IDX);
         }
@@ -1666,7 +1626,7 @@ ir::OperandIdx emit_str_intrinsic(const ast::AstArena& ast,
       return emitter.builder().operand(ir::Operand::from_immutable(imm, type));
     }
     const ir::OperandIdx second = emit_expr(
-        ast, call.args[2], expr_type(call.args[2]), emitter, ctx, params);
+        ast, call.args[2], ctx.type_of(call.args[2]), emitter, ctx, params);
     if (!second.is_valid()) {
       return ir::OperandIdx(base::INVALID_IDX);
     }
@@ -1704,16 +1664,7 @@ ir::OperandIdx emit_method_call(const ast::AstArena& ast,
                                 ConstEmitter& emitter,
                                 const EmitContext& ctx,
                                 const ParamEnv* params) {
-  [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
-      ctx.resolve_path;
-  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
-      ctx.resolve_layout_type;
-  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
-      ctx.resolve_comp_fn;
-  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
-      ctx.resolve_field_index;
-  const ir::TypeIdx receiver_type = expr_type(method.receiver);
+  const ir::TypeIdx receiver_type = ctx.type_of(method.receiver);
   if (method.name.name == "len" && method.args.empty()) {
     const ir::OperandIdx recv =
         emit_expr(ast, method.receiver, receiver_type, emitter, ctx, params);
@@ -1775,7 +1726,7 @@ ir::OperandIdx emit_method_call(const ast::AstArena& ast,
     return emitter.builder().operand(ir::Operand::from_immutable(imm, type));
   }
   const ir::OperandIdx first = emit_expr(
-      ast, method.args[0], expr_type(method.args[0]), emitter, ctx, params);
+      ast, method.args[0], ctx.type_of(method.args[0]), emitter, ctx, params);
   if (!first.is_valid()) {
     return ir::OperandIdx(base::INVALID_IDX);
   }
@@ -1798,7 +1749,7 @@ ir::OperandIdx emit_method_call(const ast::AstArena& ast,
     return ir::OperandIdx(base::INVALID_IDX);
   }
   const ir::OperandIdx second = emit_expr(
-      ast, method.args[1], expr_type(method.args[1]), emitter, ctx, params);
+      ast, method.args[1], ctx.type_of(method.args[1]), emitter, ctx, params);
   if (!second.is_valid()) {
     return ir::OperandIdx(base::INVALID_IDX);
   }
@@ -1865,15 +1816,6 @@ ir::OperandIdx emit_comp_for(const ast::AstArena& ast,
                              ConstEmitter& emitter,
                              const EmitContext& ctx,
                              const ParamEnv* params) {
-  [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
-      ctx.resolve_path;
-  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
-      ctx.resolve_layout_type;
-  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
-      ctx.resolve_comp_fn;
-  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
-      ctx.resolve_field_index;
   const ast::StmtDecl& decl =
       ast.stmts[block.statements[0]].payload.get<ast::StmtDecl>();
   const ast::ExprIdx into = decl.init;
@@ -1894,9 +1836,9 @@ ir::OperandIdx emit_comp_for(const ast::AstArena& ast,
       return ir::OperandIdx(base::INVALID_IDX);
     }
     const ir::OperandIdx start_op = emit_expr(
-        ast, range.start, expr_type(range.start), emitter, ctx, params);
+        ast, range.start, ctx.type_of(range.start), emitter, ctx, params);
     const ir::OperandIdx end_op =
-        emit_expr(ast, range.end, expr_type(range.end), emitter, ctx, params);
+        emit_expr(ast, range.end, ctx.type_of(range.end), emitter, ctx, params);
     u64 first = 0;
     u64 last = 0;
     if (!start_op.is_valid() || !end_op.is_valid() ||
@@ -1914,7 +1856,7 @@ ir::OperandIdx emit_comp_for(const ast::AstArena& ast,
     if (last < first) {
       return ir::OperandIdx(base::INVALID_IDX);
     }
-    const ir::TypeIdx elem_type = expr_type(range.start);
+    const ir::TypeIdx elem_type = ctx.type_of(range.start);
     // Check the cap inside the loop: an inclusive bound at U64_MAX would
     // otherwise wrap forever, and even a large bound allocates before the
     // post-loop cap check gets a chance to refuse it.
@@ -1942,7 +1884,7 @@ ir::OperandIdx emit_comp_for(const ast::AstArena& ast,
     if (ast.exprs[head].kind == ast::ExprKind::Array) {
       return ir::OperandIdx(base::INVALID_IDX);
     }
-    const ir::TypeIdx head_type = expr_type(head);
+    const ir::TypeIdx head_type = ctx.type_of(head);
     array_op = emit_expr(ast, head, head_type, emitter, ctx, params);
     if (!array_op.is_valid()) {
       return ir::OperandIdx(base::INVALID_IDX);
@@ -2211,22 +2153,13 @@ ir::OperandIdx emit_cast(const ast::AstArena& ast,
                          ConstEmitter& emitter,
                          const EmitContext& ctx,
                          const ParamEnv* params) {
-  [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
-      ctx.resolve_path;
-  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
-      ctx.resolve_layout_type;
-  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
-      ctx.resolve_comp_fn;
-  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
-      ctx.resolve_field_index;
   const ir::OperandIdx inner =
-      emit_expr(ast, cast.inner, expr_type(cast.inner), emitter, ctx, params);
+      emit_expr(ast, cast.inner, ctx.type_of(cast.inner), emitter, ctx, params);
   if (!inner.is_valid()) {
     return ir::OperandIdx(base::INVALID_IDX);
   }
   const ir::TypeTag target_tag = emitter.builder().state().types[type].tag;
-  const ir::TypeIdx inner_type = expr_type(cast.inner);
+  const ir::TypeIdx inner_type = ctx.type_of(cast.inner);
   const ir::TypeTag inner_tag = emitter.builder().state().types[inner_type].tag;
   // A cast of a compile-time scalar folds into an immutable; emitting
   // an opcode here would leave a register the aggregate reader cannot
@@ -2256,7 +2189,7 @@ ir::OperandIdx emit_cast(const ast::AstArena& ast,
   const ir::Opcode op =
       target_tag == ir::TypeTag::I1 ? ir::Opcode::Ne : ir::Opcode::TypeCast;
   if (op == ir::Opcode::Ne) {
-    const ir::TypeIdx inner_type = expr_type(cast.inner);
+    const ir::TypeIdx inner_type = ctx.type_of(cast.inner);
     const ir::ImmutableIdx zero = emitter.builder().immutable(
         {.type = inner_type, .data = {.u64_value = 0}});
     operands.push(emitter.builder().operand(
@@ -2285,15 +2218,6 @@ bool semantic_pattern_matches(const ast::AstArena& ast,
                               const EmitContext& ctx,
                               const ParamEnv* params,
                               Bind&& bind) {
-  [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
-      ctx.resolve_path;
-  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
-      ctx.resolve_layout_type;
-  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
-      ctx.resolve_comp_fn;
-  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
-      ctx.resolve_field_index;
   const ast::PatternNode& pat = ast.patterns[pattern];
   switch (pat.kind) {
     case ast::PatternKind::Wildcard: return true;
@@ -2393,18 +2317,10 @@ static ir::OperandIdx emit_comp_inline(const ast::AstArena& ast,
                                        const EmitContext& ctx,
                                        const ParamEnv* params) {
   [[maybe_unused]] const ast::ExprNode& node = ast.exprs[expr];
-  const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
-      ctx.resolve_path;
-  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
-      ctx.resolve_layout_type;
-  const EmitContext::CompFn& resolve_comp_fn = ctx.resolve_comp_fn;
-  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
-      ctx.resolve_field_index;
   // A comp fn call is inlined: lower the callee body's value in the
   // caller, with parameter names bound to the lowered arguments.
   CompFnInfo info;
-  if (!resolve_comp_fn(expr, info) || !info.body.is_valid()) {
+  if (!ctx.comp_fn(expr, info) || !info.body.is_valid()) {
     return ir::OperandIdx(base::INVALID_IDX);
   }
   const EmitContext callee_ctx = ctx.with_site({info.module, info.inst});
@@ -2431,7 +2347,7 @@ static ir::OperandIdx emit_comp_inline(const ast::AstArena& ast,
       }
     }
     if (!arg.is_valid()) {
-      arg = emit_expr(ast, args[i], expr_type(args[i]), emitter, ctx, params);
+      arg = emit_expr(ast, args[i], ctx.type_of(args[i]), emitter, ctx, params);
     }
     if (!arg.is_valid()) {
       emitter.leave_inline();
@@ -2453,7 +2369,7 @@ static ir::OperandIdx emit_comp_inline(const ast::AstArena& ast,
     shape.value.tag = comp::CompValue::Tag::Variadic;
     shape.value.element = info.element;
     for (usize i = fixed_count; i < args.size(); ++i) {
-      shape.value.slot_types.push_back(expr_type(args[i]));
+      shape.value.slot_types.push_back(ctx.type_of(args[i]));
     }
     const ast::PatternNode& pat = ast.patterns[info.params[fixed_count]];
     if (pat.kind == ast::PatternKind::Ident ||
@@ -2504,20 +2420,11 @@ static ir::OperandIdx emit_return_expr(const ast::AstArena& ast,
                                        const EmitContext& ctx,
                                        const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
-  const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
-      ctx.resolve_path;
-  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
-      ctx.resolve_layout_type;
-  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
-      ctx.resolve_comp_fn;
-  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
-      ctx.resolve_field_index;
   const ast::ExprReturn& ret = node.payload.get<ast::ExprReturn>();
   if (!ret.value.is_valid()) {
     return ir::OperandIdx(base::INVALID_IDX);
   }
-  const ir::TypeIdx value_type = expr_type(ret.value);
+  const ir::TypeIdx value_type = ctx.type_of(ret.value);
   const ir::OperandIdx val =
       emit_expr(ast, ret.value, value_type, emitter, ctx, params);
   if (!val.is_valid()) {
@@ -2561,15 +2468,6 @@ static ir::OperandIdx emit_literal_expr(
     [[maybe_unused]] const EmitContext& ctx,
     [[maybe_unused]] const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
-  [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
-      ctx.resolve_path;
-  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
-      ctx.resolve_layout_type;
-  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
-      ctx.resolve_comp_fn;
-  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
-      ctx.resolve_field_index;
   const ast::Literal& literal =
       ast.literals[node.payload.get<ast::ExprLiteral>().value];
   if (literal.kind == ast::LiteralKind::String) {
@@ -2611,14 +2509,6 @@ static ir::OperandIdx emit_call_expr(const ast::AstArena& ast,
                                      const EmitContext& ctx,
                                      const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
-  const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
-      ctx.resolve_path;
-  const EmitContext::LayoutType& resolve_layout_type = ctx.resolve_layout_type;
-  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
-      ctx.resolve_comp_fn;
-  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
-      ctx.resolve_field_index;
   const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
   const ast::ExprNode& callee = ast.exprs[call.callee];
   if (callee.kind == ast::ExprKind::Path) {
@@ -2635,7 +2525,7 @@ static ir::OperandIdx emit_call_expr(const ast::AstArena& ast,
           std::vector<ir::OperandIdx> arg_ops;
           bool runtime_fields = false;
           for (ast::ExprIdx arg : call.args) {
-            const ir::TypeIdx arg_ty = expr_type(arg);
+            const ir::TypeIdx arg_ty = ctx.type_of(arg);
             const ir::OperandIdx arg_op =
                 emit_expr(ast, arg, arg_ty, emitter, ctx, params);
             if (!arg_op.is_valid()) {
@@ -2712,7 +2602,7 @@ static ir::OperandIdx emit_call_expr(const ast::AstArena& ast,
           return ir::OperandIdx(base::INVALID_IDX);
         }
         std::string format_bytes;
-        const ir::TypeIdx arg_ty = expr_type(call.args[0]);
+        const ir::TypeIdx arg_ty = ctx.type_of(call.args[0]);
         const ir::OperandIdx arg_op =
             emit_expr(ast, call.args[0], arg_ty, emitter, ctx, params);
         if (!arg_op.is_valid()) {
@@ -2757,9 +2647,9 @@ static ir::OperandIdx emit_call_expr(const ast::AstArena& ast,
           return ir::OperandIdx(base::INVALID_IDX);
         }
         const ir::OperandIdx lhs = emit_expr(
-            ast, call.args[0], expr_type(call.args[0]), emitter, ctx, params);
+            ast, call.args[0], ctx.type_of(call.args[0]), emitter, ctx, params);
         const ir::OperandIdx rhs = emit_expr(
-            ast, call.args[1], expr_type(call.args[1]), emitter, ctx, params);
+            ast, call.args[1], ctx.type_of(call.args[1]), emitter, ctx, params);
         if (!lhs.is_valid() || !rhs.is_valid()) {
           return ir::OperandIdx(base::INVALID_IDX);
         }
@@ -2784,7 +2674,7 @@ static ir::OperandIdx emit_call_expr(const ast::AstArena& ast,
         return emitter.builder().operand(ir::Operand::from_register(dst, type));
       }
       if (cname == "size_of" || cname == "align_of") {
-        const ir::TypeIdx measured = resolve_layout_type(expr);
+        const ir::TypeIdx measured = ctx.layout_type_of(expr);
         if (!measured.is_valid()) {
           return ir::OperandIdx(base::INVALID_IDX);
         }
@@ -2813,14 +2703,6 @@ static ir::OperandIdx emit_path_expr(const ast::AstArena& ast,
                                      [[maybe_unused]] const EmitContext& ctx,
                                      const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
-  [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  const EmitContext::PathValue& resolve_path = ctx.resolve_path;
-  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
-      ctx.resolve_layout_type;
-  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
-      ctx.resolve_comp_fn;
-  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
-      ctx.resolve_field_index;
   const ast::PathIdx path = node.payload.get<ast::ExprPath>().idx;
   const auto& segments = ast.paths[path].segments;
   if (segments.size() == 1) {
@@ -2873,7 +2755,7 @@ static ir::OperandIdx emit_path_expr(const ast::AstArena& ast,
     }
   }
   comp::CompVal resolved;
-  if (!resolve_path(path, resolved)) {
+  if (!ctx.path_value(path, resolved)) {
     return ir::OperandIdx(base::INVALID_IDX);
   }
   if (resolved.value.tag != comp::CompValue::Tag::Int &&
@@ -2916,18 +2798,9 @@ static ir::OperandIdx emit_binary_expr(const ast::AstArena& ast,
                                        const EmitContext& ctx,
                                        const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
-  const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
-      ctx.resolve_path;
-  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
-      ctx.resolve_layout_type;
-  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
-      ctx.resolve_comp_fn;
-  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
-      ctx.resolve_field_index;
   const ast::ExprBinary& bin = node.payload.get<ast::ExprBinary>();
   const ir::OperandIdx lhs =
-      emit_expr(ast, bin.lhs, expr_type(bin.lhs), emitter, ctx, params);
+      emit_expr(ast, bin.lhs, ctx.type_of(bin.lhs), emitter, ctx, params);
   if (!lhs.is_valid()) {
     return ir::OperandIdx(base::INVALID_IDX);
   }
@@ -2943,7 +2816,7 @@ static ir::OperandIdx emit_binary_expr(const ast::AstArena& ast,
     }
   }
   const ir::OperandIdx rhs =
-      emit_expr(ast, bin.rhs, expr_type(bin.rhs), emitter, ctx, params);
+      emit_expr(ast, bin.rhs, ctx.type_of(bin.rhs), emitter, ctx, params);
   if (!rhs.is_valid()) {
     return ir::OperandIdx(base::INVALID_IDX);
   }
@@ -2983,7 +2856,7 @@ static ir::OperandIdx emit_binary_expr(const ast::AstArena& ast,
     case ast::BinaryOp::LtEq:
     case ast::BinaryOp::Gt:
     case ast::BinaryOp::GtEq: {
-      const ir::TypeIdx operand_ty = expr_type(bin.lhs);
+      const ir::TypeIdx operand_ty = ctx.type_of(bin.lhs);
       const ir::TypeTag otag = emitter.builder().state().types[operand_ty].tag;
       if (ir::is_integer_type(otag) || otag == ir::TypeTag::I1) {
         u64 l = 0;
@@ -3012,7 +2885,7 @@ static ir::OperandIdx emit_binary_expr(const ast::AstArena& ast,
   }
   if (bin.op == ast::BinaryOp::Add || bin.op == ast::BinaryOp::Sub ||
       bin.op == ast::BinaryOp::Mul) {
-    const ir::TypeIdx operand_ty = expr_type(bin.lhs);
+    const ir::TypeIdx operand_ty = ctx.type_of(bin.lhs);
     const ir::TypeTag otag = emitter.builder().state().types[operand_ty].tag;
     if (ir::is_integer_type(otag)) {
       u64 l = 0;
@@ -3131,7 +3004,7 @@ static ir::OperandIdx emit_binary_expr(const ast::AstArena& ast,
       if (sem->value.tag == comp::CompValue::Tag::Int ||
           sem->value.tag == comp::CompValue::Tag::Bool) {
         const ir::TypeIdx operand_ty =
-            operand == lhs ? expr_type(bin.lhs) : expr_type(bin.rhs);
+            operand == lhs ? ctx.type_of(bin.lhs) : ctx.type_of(bin.rhs);
         const u64 bits = sem->value.tag == comp::CompValue::Tag::Bool
                              ? (sem->value.bool_value ? 1u : 0u)
                              : sem->value.int_value;
@@ -3170,15 +3043,6 @@ static ir::OperandIdx emit_tuple_expr(const ast::AstArena& ast,
                                       const EmitContext& ctx,
                                       const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
-  [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
-      ctx.resolve_path;
-  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
-      ctx.resolve_layout_type;
-  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
-      ctx.resolve_comp_fn;
-  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
-      ctx.resolve_field_index;
   const ast::ExprTuple& tup = node.payload.get<ast::ExprTuple>();
   const ir::TupleType& shape =
       emitter.builder()
@@ -3227,15 +3091,6 @@ static ir::OperandIdx emit_array_expr(const ast::AstArena& ast,
                                       const EmitContext& ctx,
                                       const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
-  [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
-      ctx.resolve_path;
-  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
-      ctx.resolve_layout_type;
-  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
-      ctx.resolve_comp_fn;
-  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
-      ctx.resolve_field_index;
   const ast::ExprArray& arr = node.payload.get<ast::ExprArray>();
   const ir::ArrayType& shape =
       emitter.builder()
@@ -3288,14 +3143,6 @@ static ir::OperandIdx emit_struct_expr(const ast::AstArena& ast,
                                        const EmitContext& ctx,
                                        const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
-  [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
-      ctx.resolve_path;
-  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
-      ctx.resolve_layout_type;
-  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
-      ctx.resolve_comp_fn;
-  const EmitContext::FieldIndex& resolve_field_index = ctx.resolve_field_index;
   const ast::ExprStruct& strukt = node.payload.get<ast::ExprStruct>();
   if (strukt.base_expr.is_valid()) {
     return ir::OperandIdx(base::INVALID_IDX);
@@ -3307,7 +3154,7 @@ static ir::OperandIdx emit_struct_expr(const ast::AstArena& ast,
   std::vector<comp::CompValue> fields(shape.fields.size());
   for (const ast::ExprFieldInit& field : strukt.init) {
     u32 index = 0;
-    if (!resolve_field_index(type, field.name.name, index) ||
+    if (!ctx.field_index(type, field.name.name, index) ||
         index >= shape.fields.size()) {
       return ir::OperandIdx(base::INVALID_IDX);
     }
@@ -3347,16 +3194,8 @@ static ir::OperandIdx emit_field_expr(const ast::AstArena& ast,
                                       const EmitContext& ctx,
                                       const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
-  const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
-      ctx.resolve_path;
-  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
-      ctx.resolve_layout_type;
-  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
-      ctx.resolve_comp_fn;
-  const EmitContext::FieldIndex& resolve_field_index = ctx.resolve_field_index;
   const ast::ExprField& field = node.payload.get<ast::ExprField>();
-  ir::TypeIdx receiver_type = expr_type(field.receiver);
+  ir::TypeIdx receiver_type = ctx.type_of(field.receiver);
   ir::TypeTag receiver_tag = emitter.builder().state().types[receiver_type].tag;
   // A field through a reference reads the pointee's field.
   if (receiver_tag == ir::TypeTag::Ref || receiver_tag == ir::TypeTag::MutRef) {
@@ -3384,7 +3223,7 @@ static ir::OperandIdx emit_field_expr(const ast::AstArena& ast,
       return ir::OperandIdx(base::INVALID_IDX);
     }
   } else if (receiver_tag == ir::TypeTag::Struct) {
-    if (!resolve_field_index(receiver_type, field.name.name, index)) {
+    if (!ctx.field_index(receiver_type, field.name.name, index)) {
       return ir::OperandIdx(base::INVALID_IDX);
     }
   } else {
@@ -3487,17 +3326,8 @@ static ir::OperandIdx emit_index_expr(const ast::AstArena& ast,
                                       const EmitContext& ctx,
                                       const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
-  const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
-      ctx.resolve_path;
-  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
-      ctx.resolve_layout_type;
-  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
-      ctx.resolve_comp_fn;
-  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
-      ctx.resolve_field_index;
   const ast::ExprIndex& index_expr = node.payload.get<ast::ExprIndex>();
-  const ir::TypeIdx receiver_type = expr_type(index_expr.receiver);
+  const ir::TypeIdx receiver_type = ctx.type_of(index_expr.receiver);
   ir::OperandIdx base = ir::OperandIdx(base::INVALID_IDX);
   if (ast.exprs[index_expr.receiver].kind == ast::ExprKind::Path ||
       ast.exprs[index_expr.receiver].kind == ast::ExprKind::Field ||
@@ -3517,8 +3347,8 @@ static ir::OperandIdx emit_index_expr(const ast::AstArena& ast,
     const comp::CompVal sem = *sem_ptr;
     if (sem.value.tag == comp::CompValue::Tag::Variadic) {
       const ir::OperandIdx pos =
-          emit_expr(ast, index_expr.index, expr_type(index_expr.index), emitter,
-                    ctx, params);
+          emit_expr(ast, index_expr.index, ctx.type_of(index_expr.index),
+                    emitter, ctx, params);
       if (!pos.is_valid()) {
         return ir::OperandIdx(base::INVALID_IDX);
       }
@@ -3544,8 +3374,8 @@ static ir::OperandIdx emit_index_expr(const ast::AstArena& ast,
     }
     if (sem.value.tag == comp::CompValue::Tag::Array) {
       const ir::OperandIdx pos =
-          emit_expr(ast, index_expr.index, expr_type(index_expr.index), emitter,
-                    ctx, params);
+          emit_expr(ast, index_expr.index, ctx.type_of(index_expr.index),
+                    emitter, ctx, params);
       if (!pos.is_valid()) {
         return ir::OperandIdx(base::INVALID_IDX);
       }
@@ -3570,7 +3400,7 @@ static ir::OperandIdx emit_index_expr(const ast::AstArena& ast,
       ir::TypeTag::Array) {
     return ir::OperandIdx(base::INVALID_IDX);
   }
-  const ir::TypeIdx position_type = expr_type(index_expr.index);
+  const ir::TypeIdx position_type = ctx.type_of(index_expr.index);
   const ir::OperandIdx position =
       emit_expr(ast, index_expr.index, position_type, emitter, ctx, params);
   if (!base.is_valid() || !position.is_valid()) {
@@ -3635,15 +3465,6 @@ static ir::OperandIdx emit_block_value(const ast::AstArena& ast,
                                        const EmitContext& ctx,
                                        const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
-  [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
-      ctx.resolve_path;
-  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
-      ctx.resolve_layout_type;
-  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
-      ctx.resolve_comp_fn;
-  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
-      ctx.resolve_field_index;
   return emit_block(ast, ast.blocks[node.payload.get<ast::ExprBlock>().block],
                     type, emitter, ctx, params);
 }
@@ -3655,19 +3476,10 @@ static ir::OperandIdx emit_borrow_deref_expr(const ast::AstArena& ast,
                                              const EmitContext& ctx,
                                              const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
-  const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
-      ctx.resolve_path;
-  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
-      ctx.resolve_layout_type;
-  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
-      ctx.resolve_comp_fn;
-  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
-      ctx.resolve_field_index;
   const ast::ExprIdx inner = node.kind == ast::ExprKind::Borrow
                                  ? node.payload.get<ast::ExprBorrow>().inner
                                  : node.payload.get<ast::ExprDeref>().inner;
-  return emit_expr(ast, inner, expr_type(inner), emitter, ctx, params);
+  return emit_expr(ast, inner, ctx.type_of(inner), emitter, ctx, params);
 }
 
 static ir::OperandIdx emit_if_expr(const ast::AstArena& ast,
@@ -3677,15 +3489,6 @@ static ir::OperandIdx emit_if_expr(const ast::AstArena& ast,
                                    const EmitContext& ctx,
                                    const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
-  const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
-      ctx.resolve_path;
-  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
-      ctx.resolve_layout_type;
-  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
-      ctx.resolve_comp_fn;
-  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
-      ctx.resolve_field_index;
   const ast::ExprIf& if_node = node.payload.get<ast::ExprIf>();
   const ast::Cond& cond = ast.conds[if_node.cond];
   if (cond.is_pattern) {
@@ -3710,7 +3513,7 @@ static ir::OperandIdx emit_if_expr(const ast::AstArena& ast,
     return ir::OperandIdx(base::INVALID_IDX);
   }
   const ir::OperandIdx cond_val =
-      emit_expr(ast, cond.value, expr_type(cond.value), emitter, ctx, params);
+      emit_expr(ast, cond.value, ctx.type_of(cond.value), emitter, ctx, params);
   if (!cond_val.is_valid()) {
     return ir::OperandIdx(base::INVALID_IDX);
   }
@@ -3745,12 +3548,12 @@ static ir::OperandIdx emit_if_expr(const ast::AstArena& ast,
   // but no value, so emit the whole block rather than just its value.
   emitter.set_cur(then_b);
   const ir::OperandIdx then_val =
-      value_if
-          ? emit_expr(ast, then_block.value, type, emitter, ctx, params)
-          : emit_block(ast, then_block,
-                       then_block.value.is_valid() ? expr_type(then_block.value)
-                                                   : type,
-                       emitter, ctx, params);
+      value_if ? emit_expr(ast, then_block.value, type, emitter, ctx, params)
+               : emit_block(ast, then_block,
+                            then_block.value.is_valid()
+                                ? ctx.type_of(then_block.value)
+                                : type,
+                            emitter, ctx, params);
   if (!then_val.is_valid()) {
     return ir::OperandIdx(base::INVALID_IDX);
   }
@@ -3766,7 +3569,7 @@ static ir::OperandIdx emit_if_expr(const ast::AstArena& ast,
         value_if ? emit_expr(ast, else_block->value, type, emitter, ctx, params)
                  : emit_block(ast, *else_block,
                               else_block->value.is_valid()
-                                  ? expr_type(else_block->value)
+                                  ? ctx.type_of(else_block->value)
                                   : type,
                               emitter, ctx, params);
     if (!else_val.is_valid()) {
@@ -3796,15 +3599,6 @@ static ir::OperandIdx emit_break_continue_expr(
     [[maybe_unused]] const EmitContext& ctx,
     [[maybe_unused]] const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
-  [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
-      ctx.resolve_path;
-  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
-      ctx.resolve_layout_type;
-  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
-      ctx.resolve_comp_fn;
-  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
-      ctx.resolve_field_index;
   const ir::BlockIdx target = node.kind == ast::ExprKind::Break
                                   ? emitter.break_target()
                                   : emitter.continue_target();
@@ -3825,15 +3619,6 @@ static ir::OperandIdx emit_while_expr(const ast::AstArena& ast,
                                       const EmitContext& ctx,
                                       const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
-  const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
-      ctx.resolve_path;
-  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
-      ctx.resolve_layout_type;
-  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
-      ctx.resolve_comp_fn;
-  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
-      ctx.resolve_field_index;
   const ast::ExprWhile& while_node = node.payload.get<ast::ExprWhile>();
   const ast::Cond& cond = ast.conds[while_node.cond];
   if (cond.is_pattern || !cond.value.is_valid()) {
@@ -3848,7 +3633,7 @@ static ir::OperandIdx emit_while_expr(const ast::AstArena& ast,
 
   emitter.set_cur(header);
   const ir::OperandIdx cond_val =
-      emit_expr(ast, cond.value, expr_type(cond.value), emitter, ctx, params);
+      emit_expr(ast, cond.value, ctx.type_of(cond.value), emitter, ctx, params);
   if (!cond_val.is_valid()) {
     return ir::OperandIdx(base::INVALID_IDX);
   }
@@ -4040,20 +3825,11 @@ static ir::OperandIdx emit_match_expr(const ast::AstArena& ast,
                                       const EmitContext& ctx,
                                       const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
-  const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
-      ctx.resolve_path;
-  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
-      ctx.resolve_layout_type;
-  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
-      ctx.resolve_comp_fn;
-  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
-      ctx.resolve_field_index;
   const ast::ExprMatch& match_node = node.payload.get<ast::ExprMatch>();
   if (match_node.arms.empty()) {
     return ir::OperandIdx(base::INVALID_IDX);
   }
-  const ir::TypeIdx scrutinee_type = expr_type(match_node.scrutinee);
+  const ir::TypeIdx scrutinee_type = ctx.type_of(match_node.scrutinee);
   const ir::OperandIdx scrutinee = emit_expr(
       ast, match_node.scrutinee, scrutinee_type, emitter, ctx, params);
   if (!scrutinee.is_valid()) {
@@ -4241,15 +4017,6 @@ static ir::OperandIdx emit_method_call_expr(const ast::AstArena& ast,
                                             const EmitContext& ctx,
                                             const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
-  [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
-      ctx.resolve_path;
-  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
-      ctx.resolve_layout_type;
-  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
-      ctx.resolve_comp_fn;
-  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
-      ctx.resolve_field_index;
   const ast::ExprMethodCall& method = node.payload.get<ast::ExprMethodCall>();
   const ir::OperandIdx built =
       emit_method_call(ast, method, type, emitter, ctx, params);
@@ -4302,15 +4069,6 @@ static ir::OperandIdx emit_closure_expr(
     [[maybe_unused]] const EmitContext& ctx,
     [[maybe_unused]] const ParamEnv* params) {
   [[maybe_unused]] const ast::ExprNode& node = ast.exprs[expr];
-  [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
-      ctx.resolve_path;
-  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
-      ctx.resolve_layout_type;
-  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
-      ctx.resolve_comp_fn;
-  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
-      ctx.resolve_field_index;
   return emitter.void_operand();
 }
 
@@ -4321,15 +4079,6 @@ static ir::OperandIdx emit_loop_expr(const ast::AstArena& ast,
                                      const EmitContext& ctx,
                                      const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
-  [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
-      ctx.resolve_path;
-  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
-      ctx.resolve_layout_type;
-  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
-      ctx.resolve_comp_fn;
-  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
-      ctx.resolve_field_index;
   const ast::ExprLoop& loop_node = node.payload.get<ast::ExprLoop>();
   if (!loop_node.body.is_valid()) {
     return ir::OperandIdx(base::INVALID_IDX);
@@ -4366,15 +4115,6 @@ static ir::OperandIdx emit_range_expr(const ast::AstArena& ast,
                                       const EmitContext& ctx,
                                       const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
-  [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
-      ctx.resolve_path;
-  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
-      ctx.resolve_layout_type;
-  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
-      ctx.resolve_comp_fn;
-  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
-      ctx.resolve_field_index;
   return emit_range(ast, node.payload.get<ast::ExprRange>(), type, emitter, ctx,
                     params);
 }
@@ -4386,17 +4126,8 @@ static ir::OperandIdx emit_question_expr(const ast::AstArena& ast,
                                          const EmitContext& ctx,
                                          const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
-  const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
-      ctx.resolve_path;
-  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
-      ctx.resolve_layout_type;
-  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
-      ctx.resolve_comp_fn;
-  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
-      ctx.resolve_field_index;
   const ast::ExprQuestion& question = node.payload.get<ast::ExprQuestion>();
-  const ir::TypeIdx inner_type = expr_type(question.inner);
+  const ir::TypeIdx inner_type = ctx.type_of(question.inner);
   const ir::OperandIdx inner =
       emit_expr(ast, question.inner, inner_type, emitter, ctx, params);
   if (!inner.is_valid()) {
@@ -4507,15 +4238,6 @@ static ir::OperandIdx emit_cast_expr(const ast::AstArena& ast,
                                      const EmitContext& ctx,
                                      const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
-  [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
-      ctx.resolve_path;
-  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
-      ctx.resolve_layout_type;
-  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
-      ctx.resolve_comp_fn;
-  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
-      ctx.resolve_field_index;
   return emit_cast(ast, node.payload.get<ast::ExprCast>(), type, emitter, ctx,
                    params);
 }
@@ -4527,18 +4249,9 @@ static ir::OperandIdx emit_unary_expr(const ast::AstArena& ast,
                                       const EmitContext& ctx,
                                       const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
-  const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
-      ctx.resolve_path;
-  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
-      ctx.resolve_layout_type;
-  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
-      ctx.resolve_comp_fn;
-  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
-      ctx.resolve_field_index;
   const ast::ExprUnary& unary = node.payload.get<ast::ExprUnary>();
-  const ir::OperandIdx inner =
-      emit_expr(ast, unary.inner, expr_type(unary.inner), emitter, ctx, params);
+  const ir::OperandIdx inner = emit_expr(
+      ast, unary.inner, ctx.type_of(unary.inner), emitter, ctx, params);
   if (!inner.is_valid()) {
     return ir::OperandIdx(base::INVALID_IDX);
   }
@@ -4556,7 +4269,7 @@ static ir::OperandIdx emit_unary_expr(const ast::AstArena& ast,
     }
   }
   if (unary.op == ast::UnaryOp::Neg || unary.op == ast::UnaryOp::Not) {
-    const ir::TypeIdx inner_type = expr_type(unary.inner);
+    const ir::TypeIdx inner_type = ctx.type_of(unary.inner);
     const ir::ImmutableIdx zero = emitter.builder().immutable(
         {.type = inner_type, .data = {.u64_value = 0}});
     const ir::OperandIdx zero_op = emitter.builder().operand(
@@ -4669,8 +4382,6 @@ ir::OperandIdx emit_expr(const ast::AstArena& ast,
   return ir::OperandIdx(base::INVALID_IDX);
 }
 
-}  // namespace
-
 comp::IrRunError emit_failure(ConstEmitter::EmitError kind,
                               std::string_view fallback) {
   const ir::InstructionIdx no_instr(base::INVALID_IDX);
@@ -4697,6 +4408,8 @@ comp::IrRunError emit_failure(ConstEmitter::EmitError kind,
   }
   return {comp::IrRunError::Kind::Unsupported, no_instr, fallback};
 }
+
+}  // namespace
 
 bool evaluate_const_ir(const ast::AstArena& ast,
                        ast::ExprIdx expr,
