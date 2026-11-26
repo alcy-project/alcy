@@ -924,7 +924,12 @@ class TextWriter {
                        immutable.data.i64_value);
         break;
       case TypeTag::U8:
+      case TypeTag::Char:
         fmt::format_to(std::back_inserter(out_), "{}", immutable.data.u8_value);
+        break;
+      case TypeTag::Rune:
+        fmt::format_to(std::back_inserter(out_), "{}",
+                       immutable.data.u32_value);
         break;
       case TypeTag::U16:
         fmt::format_to(std::back_inserter(out_), "{}",

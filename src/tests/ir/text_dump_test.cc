@@ -306,6 +306,54 @@ TEST_CASE("The preamble declares composites and externs") {
   CHECK(text == want);
 }
 
+TEST_CASE("The text view prints character and rune immediates") {
+  StorageBuilder builder;
+  ir::SymbolTable strings;
+  const TypeIdx ch = builder.primitive(TypeTag::Char);
+  const TypeIdx rune = builder.primitive(TypeTag::Rune);
+
+  const auto add_return = [&](TypeIdx type, u64 bits, std::string_view name) {
+    const ImmutableIdx imm =
+        builder.immutable({.type = type, .data = {.u64_value = bits}});
+    const OperandIdx operand =
+        builder.operand(Operand::from_immutable(imm, type));
+    const BlockIdx block = builder.block({});
+    const InstructionIdx ret = builder.instr({
+        .op = Opcode::Ret,
+        .flags = {},
+        .dst = RegisterIdx::invalid(),
+        .measure = TypeIdx::invalid(),
+        .operands = {operand, 1},
+    });
+    builder.set_block_instrs(block, {ret, 1});
+    builder.function({.meta = {.return_type = type,
+                               .param_types = {},
+                               .name = strings.intern_copied(name).value(),
+                               .path = str::EMPTY_STRING_ID,
+                               .kind = SymbolKind::Free,
+                               .generics = TypeIdxRange{}},
+                      .blocks = {block, 1}});
+  };
+  add_return(ch, 10, "ch");
+  add_return(rune, 233, "rune");
+
+  const Storage storage(std::move(builder).take_state());
+  const WriteInput input{
+      .storage = &storage,
+      .strings = &strings,
+      .instr_spans = {},
+      .files = {},
+      .addr_names = {},
+      .summary = {},
+      .prelude_functions = 0,
+      .width = PointerWidth::W64,
+      .compiler_version = {},
+  };
+  const std::string text = write_text(input);
+  CHECK(text.find("ret 10\n") != std::string::npos);
+  CHECK(text.find("ret 233\n") != std::string::npos);
+}
+
 TEST_CASE("The text view prints a const argument") {
   StorageBuilder builder;
   ir::SymbolTable strings;
