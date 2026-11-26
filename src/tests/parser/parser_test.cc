@@ -1878,7 +1878,7 @@ TEST_CASE("Parser reads a struct pattern in a declaration and condition") {
   CHECK(!f.bag.has_errors());
 }
 
-TEST_CASE("A spelled declaration reports the alcy form once") {
+TEST_CASE("A spelled declaration reports the Alcy form once") {
   struct Case {
     std::string_view source;
     std::string_view message;
@@ -1938,7 +1938,7 @@ TEST_CASE("The spelling shapes leave bindings of those names alone") {
   CHECK(result.ok);
 }
 
-TEST_CASE("A spelled condition reports the alcy form once") {
+TEST_CASE("A spelled condition reports the Alcy form once") {
   const std::string_view sources[] = {
       "fn main() {\n  o := 1\n  if let 1 = o {\n  }\n}\n",
       "fn main() {\n  o := 1\n  while let Some(x) = o {\n  }\n}\n",
@@ -1957,11 +1957,11 @@ TEST_CASE("A macro call reports once") {
   Fixture f;
   const ParseResult result = parse("fn main() {\n  println!(\"x\")\n}\n", f);
   CHECK(!result.ok);
-  CHECK(has_message(f.bag, "alcy has no macros; call `name(...)`"));
+  CHECK(has_message(f.bag, "Alcy has no macros; call `name(...)`"));
   CHECK(f.bag.error_count() == 1);
 }
 
-TEST_CASE("An increment or decrement reports the alcy spelling") {
+TEST_CASE("An increment or decrement reports the Alcy spelling") {
   struct Case {
     std::string_view source;
   };
@@ -1979,12 +1979,12 @@ TEST_CASE("An increment or decrement reports the alcy spelling") {
     const ParseResult result = parse(c.source, f);
     CHECK(!result.ok);
     CHECK(has_message(f.bag,
-                      "alcy has no `++` or `--`; write `x += 1` or "
+                      "Alcy has no `++` or `--`; write `x += 1` or "
                       "`x -= 1` instead"));
   }
 }
 
-TEST_CASE("A static or const item declared with = reports the alcy spelling") {
+TEST_CASE("A static or const item declared with = reports the Alcy spelling") {
   struct Case {
     std::string_view source;
   };
@@ -2012,11 +2012,11 @@ TEST_CASE("Subtraction of a negation is not an increment") {
       f);
   CHECK(result.ok);
   CHECK(!has_message(f.bag,
-                     "alcy has no `++` or `--`; write `x += 1` or "
+                     "Alcy has no `++` or `--`; write `x += 1` or "
                      "`x -= 1` instead"));
 }
 
-TEST_CASE("A spelled item reports the alcy form once") {
+TEST_CASE("A spelled item reports the Alcy form once") {
   struct Case {
     std::string_view source;
     std::string_view message;

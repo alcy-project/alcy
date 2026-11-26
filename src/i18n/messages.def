@@ -75,10 +75,10 @@
   F(AnalyzerInvalidSyntaxTree, Error, Analyzer, "Internal error: invalid syntax tree: {}") \
   F(ParserInvalidTokenStream, Error, Parser, "Internal error: invalid token stream: {}") \
   F(ParserLetSpelling, Error, Parser, "`let` is not a keyword; declare with `x := ...` (`mut x := ...` when mutable)") \
-  F(ParserMacroCallSpelling, Error, Parser, "alcy has no macros; call `name(...)`") \
+  F(ParserMacroCallSpelling, Error, Parser, "Alcy has no macros; call `name(...)`") \
   F(ParserModuleFromManifest, Error, Parser, "modules are declared in `alcy.toml`; there is no `mod`") \
   F(ParserMutDeclarationSpelling, Error, Parser, "a mutable declaration is `mut x := ...`; `=` only reassigns") \
-  F(ParserIncrementSpelling, Error, Parser, "alcy has no `++` or `--`; write `x += 1` or `x -= 1` instead") \
+  F(ParserIncrementSpelling, Error, Parser, "Alcy has no `++` or `--`; write `x += 1` or `x -= 1` instead") \
   F(ParserNameAlreadyBound, Error, Parser, "Name `{}` is already bound in this scope") \
   F(ParserNestingTooDeep, Error, Parser, "Nesting is deeper than the limit of {}") \
   F(AnalyzerNestingTooDeep, Error, Analyzer, "Nesting is deeper than the limit of {}") \
@@ -522,8 +522,8 @@
   F(PipelineUnknownSourceFile, Error, Pipeline, "Unknown file id for a source input") \
   F(PipelineWasmExecutableNeedsModule, Error, Pipeline, "A wasm executable is one final module; the '{}' backend writes an object instead. Use --emit=object, or --backend=direct-wasm") \
   /* cli */ \
-  F(CliAbout, Note, Pipeline, "alcy language compiler") \
-  F(CliBackendHelp, Note, Pipeline, "Which code generation backend writes the machine code: direct-x86_64 (the default for native x86_64 Linux debug builds), direct-riscv64 (the default for riscv64 Linux debug builds), llvm (the default for optimized builds and the other targets), or direct-wasm for alcy's own wasm emitter.") \
+  F(CliAbout, Note, Pipeline, "Alcy language compiler") \
+  F(CliBackendHelp, Note, Pipeline, "Which code generation backend writes the machine code: direct-x86_64 (the default for native x86_64 Linux debug builds), direct-riscv64 (the default for riscv64 Linux debug builds), llvm (the default for optimized builds and the other targets), or direct-wasm for Alcy's own wasm emitter.") \
   F(CliBuildAbout, Note, Pipeline, "Build a package directory") \
   F(CliBuildFileHelp, Note, Pipeline, "Build one source file instead of a package directory.") \
   F(CliBuildOutputHelp, Note, Pipeline, "Where the output goes. Empty picks the package's out/ directory.") \
