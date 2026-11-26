@@ -268,14 +268,14 @@ def report(current: dict, limit: int) -> None:
         )
 
 
-def ratchet(current: dict) -> int:
+def ratchet(current: dict, limit: int) -> int:
     """Fails when coverage lands below the recorded baseline."""
     if not BASELINE.is_file():
         sys.exit(f"{BASELINE} is missing. Record the current numbers with --update.")
     baseline = json.loads(BASELINE.read_text())
     was = baseline["lines"]["percent"]
     now = current["lines"]["percent"]
-    report(current, limit=8)
+    report(current, limit)
     if now < was - TOLERANCE:
         print(
             f"\ncoverage fell from {was:.2f}% to {now:.2f}%, "
@@ -292,7 +292,7 @@ def ratchet(current: dict) -> int:
     return 0
 
 
-def write_baseline(current: dict) -> None:
+def write_baseline(current: dict, limit: int) -> None:
     payload = {
         "comment": [
             "Recorded by tools/check_coverage.py --update.",
@@ -304,7 +304,7 @@ def write_baseline(current: dict) -> None:
     }
     BASELINE.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
     print(f"wrote {BASELINE.relative_to(REPO_ROOT)}")
-    report(current, limit=8)
+    report(current, limit)
 
 
 def main() -> int:
@@ -357,12 +357,12 @@ def main() -> int:
     current = measure(args.verbose)
     timing.mark("measure")
     if args.update:
-        write_baseline(current)
+        write_baseline(current, args.limit)
         return 0
     if args.report:
         report(current, args.limit)
         return 0
-    return ratchet(current)
+    return ratchet(current, args.limit)
 
 
 if __name__ == "__main__":
