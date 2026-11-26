@@ -87,6 +87,7 @@ source_set("cli") {
     "//src/linter",
     "//src/lsp",
     "//src/pipeline",
+    "//src/tcp",
     "//src/testgen",
   ]
   defines = [ "ALCY_PROJECT_NAME=\"$project_name\"" ]

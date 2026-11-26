@@ -135,6 +135,12 @@ struct CliConfig {
   std::vector<std::string_view> lint_allow;
   std::vector<std::string_view> lint_warn;
   std::vector<std::string_view> lint_deny;
+  // The transport `alcy lsp` listens on. Standard streams remain the
+  // default; TCP accepts one loopback connection.
+  enum class LspTransport : u8 { Stdio, Tcp };
+  LspTransport lsp_transport = LspTransport::Stdio;
+  std::string_view lsp_host = "127.0.0.1";
+  std::string_view lsp_port = "";
   // The files fmt was pointed at, in command-line order. Empty reads
   // standard input and writes standard output unless package discovery
   // applies. Views borrow argv storage like input.

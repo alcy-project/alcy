@@ -25,9 +25,11 @@ alcy/structLayout request and hover return.
 
 import argparse
 import json
+import socket
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 from utils import timing
@@ -1048,6 +1050,103 @@ def package_session(alcy: Path) -> int:
     return 0
 
 
+def recv_response(sock: socket.socket, wanted_id: int) -> dict:
+    header = b""
+    while b"\r\n\r\n" not in header:
+        part = sock.recv(1)
+        if not part:
+            raise RuntimeError("tcp session closed before a response")
+        header += part
+    length = int(header.split(b":")[1].strip())
+    payload = b""
+    while len(payload) < length:
+        part = sock.recv(length - len(payload))
+        if not part:
+            raise RuntimeError("tcp session closed inside a response")
+        payload += part
+    message = json.loads(payload)
+    if message.get("id") != wanted_id:
+        return recv_response(sock, wanted_id)
+    return message
+
+
+def tcp_session(alcy: Path) -> int:
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    proc = subprocess.Popen(
+        [str(alcy), "lsp", "--transport=tcp", f"--port={port}"],
+        cwd=project_root_dir,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=run_environment(),
+    )
+    try:
+        sock = None
+        for _ in range(50):
+            try:
+                sock = socket.create_connection(("127.0.0.1", port), timeout=1)
+                break
+            except OSError:
+                time.sleep(0.1)
+        if sock is None:
+            print("lsp tcp session: server did not listen")
+            print(proc.stderr.read().decode("utf-8", "replace"))
+            return 1
+        with sock:
+            sock.sendall(
+                frame(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "initialize",
+                        "params": {"rootUri": None, "capabilities": {}},
+                    }
+                )
+            )
+            started = recv_response(sock, 1)
+            if "capabilities" not in started.get("result", {}):
+                print(f"lsp tcp session: initialize answered {started!r}")
+                return 1
+            sock.sendall(
+                frame(
+                    {
+                        "jsonrpc": "2.0",
+                        "method": "initialized",
+                        "params": {},
+                    }
+                )
+            )
+            sock.sendall(
+                frame(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 2,
+                        "method": "shutdown",
+                        "params": {},
+                    }
+                )
+            )
+            recv_response(sock, 2)
+            sock.sendall(
+                frame(
+                    {
+                        "jsonrpc": "2.0",
+                        "method": "exit",
+                        "params": {},
+                    }
+                )
+            )
+    finally:
+        code = proc.wait(timeout=10)
+    if code != 0:
+        print(f"lsp tcp session exited {code}")
+        print(proc.stderr.read().decode("utf-8", "replace"))
+        return 1
+    print("lsp: tcp session passed")
+    return 0
+
+
 if __name__ == "__main__":
     from utils.timing import run_with_timings
 
@@ -1058,6 +1157,10 @@ if __name__ == "__main__":
             return code
         code = package_session(alcy_binary(BUILD_SUBDIR))
         timing.mark("package")
+        if code != 0:
+            return code
+        code = tcp_session(alcy_binary(BUILD_SUBDIR))
+        timing.mark("tcp")
         return code
 
     sys.exit(run_with_timings(run))

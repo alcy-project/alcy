@@ -635,7 +635,10 @@
   F(CliVerbTested, Note, Pipeline, "Tested") \
   /* linter */ \
   F(CliLintAbout, Note, Pipeline, "Check a package for lint findings") \
-  F(CliLspAbout, Note, Pipeline, "Serve the language server over standard input and output") \
+  F(CliLspAbout, Note, Pipeline, "Serve the language server over standard input and output, or a local TCP connection") \
+  F(CliLspTransportHelp, Note, Pipeline, "Read and write protocol frames over standard input and output, or a TCP connection") \
+  F(CliLspHostHelp, Note, Pipeline, "Address to bind in TCP mode; only loopback addresses are accepted") \
+  F(CliLspPortHelp, Note, Pipeline, "Port to bind in TCP mode; required when --transport=tcp") \
   F(CliLintFileHelp, Note, Pipeline, "Lint a single source file instead of a package directory.") \
   F(CliLintFixHelp, Note, Pipeline, "Apply the repairs a rule is sure of, then report what remains.") \
   F(CliLintAllowHelp, Note, Pipeline, "Silence a rule (a rule id, or all). Repeatable.") \

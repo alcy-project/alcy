@@ -123,6 +123,14 @@ base::Result<CliConfig, ParseFailure> extract_from_matches(
       }
     }
   }
+  if (auto transport = matches.get<std::string_view>("transport");
+      transport.is_ok()) {
+    c.lsp_transport = std::move(transport).unwrap() == "tcp"
+                          ? CliConfig::LspTransport::Tcp
+                          : CliConfig::LspTransport::Stdio;
+  }
+  c.lsp_host = matches.get<std::string_view>("host").unwrap_or(c.lsp_host);
+  c.lsp_port = matches.get<std::string_view>("port").unwrap_or(c.lsp_port);
   c.lint_fix = matches.get<bool>("fix").unwrap_or(c.lint_fix);
   c.lint_list_rules =
       matches.get<bool>("list-rules").unwrap_or(c.lint_list_rules);
@@ -685,6 +693,20 @@ arg::Parser build_parser(i18n::Language language) {
           .build());
   builder.add_subcommand(
       build_subcommand("lsp", std::string(usage.text(i18n::Key::CliLspAbout)))
+          .add_arg(arg::ArgBuilder("transport")
+                       .help(usage.text(i18n::Key::CliLspTransportHelp))
+                       .choices({"stdio", "tcp"})
+                       .default_value("stdio")
+                       .build())
+          .add_arg(arg::ArgBuilder("host")
+                       .help(usage.text(i18n::Key::CliLspHostHelp))
+                       .default_value("127.0.0.1")
+                       .build())
+          .add_arg(arg::ArgBuilder("port")
+                       .help(usage.text(i18n::Key::CliLspPortHelp))
+                       .value_name("PORT")
+                       .default_value("")
+                       .build())
           .build());
   return arg::Parser(std::move(builder).build());
 }

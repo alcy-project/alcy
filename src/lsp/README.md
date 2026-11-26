@@ -1,13 +1,17 @@
 # lsp
 
 The language server: `alcy lsp` speaks LSP over standard input and
-output. The module is a library over the toolchain rather than a stage
-of the compiler, so it owns no analysis of its own:
+output by default. `--transport=tcp --host=127.0.0.1 --port=N` serves
+one connection over a loopback socket instead. Only loopback hosts are
+accepted in TCP mode; the server has no authentication. The module is a
+library over the toolchain rather than a stage of the compiler, so it
+owns no analysis of its own:
 
 - `frame.{h,cc}` is the base protocol: a `Content-Length` header and
   a JSON-RPC payload per frame.
-- `transport.{h,cc}` reads and writes those frames over a descriptor
-  pair and buffers the reads.
+- `transport.{h,cc}` reads and writes those frames over either a
+  descriptor pair or one socket, and buffers the reads. The socket is
+  owned by the caller; `src/tcp/` owns the socket itself.
 - `document.{h,cc}` holds the open buffers, applies incremental
   changes in protocol order, and maps LSP positions to byte offsets.
 - `folding.{h,cc}` folds every multi-line brace pair and every run of
@@ -97,8 +101,8 @@ ranges, rename, the outline, and folding directly.
 session against the built binary and asserts the handshake, a published
 diagnostic, a formatting edit, the outline, both kinds of fold, a
 definition and its references, a completion and a signature, an inlay
-hint, and the layout both hover and `alcy/structLayout` return, which
-is the check CI asks.
+hint, and the layout both hover and `alcy/structLayout` return. It also
+runs the handshake over a TCP connection, which is the check CI asks.
 
 ## Notes
 
