@@ -33,7 +33,7 @@ enum class DiagCode : u8 {
   AlreadyBound = 8,
   // A declaration, a return, or another construct is spelled the way a
   // neighboring language spells it; the shape is recognized and the
-  // message names the alcy spelling.
+  // message names the Alcy spelling.
   Spelling = 9,
   UnknownAttribute = 10,
   WhenUnknownTarget = 11,

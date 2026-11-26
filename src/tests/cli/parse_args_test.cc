@@ -199,7 +199,7 @@ TEST_CASE("Parse emit modes") {
   CHECK(parse_ok(llvm).emit == pipeline::EmitMode::LlvmIr);
   const std::string_view bc[] = {"alcy", "build", "--emit=llvm-bc"};
   CHECK(parse_ok(bc).emit == pipeline::EmitMode::LlvmBitcode);
-  // `ir` names alcy's own IR, never LLVM's; `llvm-ir` is the LLVM one.
+  // `ir` names Alcy's own IR, never LLVM's; `llvm-ir` is the LLVM one.
   const std::string_view alcy_ir[] = {"alcy", "build", "--emit=ir"};
   CHECK(parse_ok(alcy_ir).emit == pipeline::EmitMode::Ir);
   CHECK(parse_ok(alcy_ir).emit != pipeline::EmitMode::LlvmIr);

@@ -283,7 +283,7 @@ def main() -> int:
         )
 
     if not args.no_sanitize:
-        # The same cases again through --emit=llvm-ir, so the code alcy
+        # The same cases again through --emit=llvm-ir, so the code Alcy
         # generates is compiled by an external toolchain that can
         # instrument it. Slow, and refused rather than skipped where
         # clang is absent: naming the flag is the difference between a

@@ -1,5 +1,5 @@
 // `#[repr(C)]` fixes a struct's layout to the platform's C layout; the
-// alcy default already satisfies it, and the marker is a contract that
+// Alcy default already satisfies it, and the marker is a contract that
 // it will not change.
 #[repr(C)]
 struct Pair {

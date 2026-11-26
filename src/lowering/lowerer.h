@@ -1458,7 +1458,7 @@ class Lowerer {
     bool helper_signature_ok(const analyzer::CheckedModule::FnSig& sig,
                              usize value_count,
                              std::optional<ir::TypeTag> value_tag) const;
-    // Formats a primitive through an alcy free helper: the body owns
+    // Formats a primitive through an Alcy free helper: the body owns
     // the spelling or digits, the lane supplies the destination view.
     bool emit_primitive_helper(diag::Span span,
                                std::string_view name,

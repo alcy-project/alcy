@@ -6,7 +6,7 @@
 - **Targets:** Native binaries (LLVM, or `direct-x86_64` for x86_64 Linux
   debug and `direct-riscv64` for riscv64 Linux debug), WASI
   (`--backend=direct-wasm`), `wasm32-unknown-emscripten`.
-  Freestanding builds need no `libc` (see `README.md`, "What alcy is", and
+  Freestanding builds need no `libc` (see `README.md`, "What Alcy is", and
   `docs/spec/ffi.md`).
 
 ## Docs

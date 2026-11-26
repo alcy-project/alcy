@@ -1,4 +1,4 @@
-# The alcy standard library, as a suite.
+# The Alcy standard library, as a suite.
 #
 # A suite is a named set of packages. `"alcy/std/*" = {}` pulls every
 # member below; `"alcy/std/core" = {}` pulls one. There are no suites

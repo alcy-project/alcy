@@ -1,8 +1,8 @@
-# alcy programming language
+# Alcy programming language
 
 [![CI](https://github.com/alcy-project/alcy/actions/workflows/ci.yaml/badge.svg)](https://github.com/alcy-project/alcy/actions/workflows/ci.yaml)
 
-alcy is an experimental systems language. It is statically typed and
+Alcy is an experimental systems language. It is statically typed and
 move-only, it is memory safe without lifetime annotations, and it spans
 bare metal to high-level software with one compiler.
 
@@ -23,8 +23,8 @@ for the design, and the
 compiler accepts today, with every example on that page compiled when the
 site is built.
 
-The [alcy site](https://alcy-project.github.io/alcy/) carries that guide,
-the language reference, and a browser playground: edit and run alcy in a
+The [Alcy site](https://alcy-project.github.io/alcy/) carries that guide,
+the language reference, and a browser playground: edit and run Alcy in a
 tab, with no install.
 
 ## Status
@@ -41,13 +41,13 @@ compiles today may need an edit tomorrow.
 - [samples/](samples/) - small programs kept because they are worth
   reading, `fizzbuzz` and `wordfreq` among them.
 
-## What alcy is
+## What Alcy is
 
-alcy compiles to stand-alone binaries or to WebAssembly. On native
-x86_64 Linux a debug build uses alcy's own x86_64 emitter
+Alcy compiles to stand-alone binaries or to WebAssembly. On native
+x86_64 Linux a debug build uses Alcy's own x86_64 emitter
 (`--backend=direct-x86_64`), which writes the object without LLVM;
 an optimized build uses the LLVM backend. WebAssembly uses
-`--backend=direct-wasm`, alcy's own WASI emitter, with no LLVM and no
+`--backend=direct-wasm`, Alcy's own WASI emitter, with no LLVM and no
 linker behind it. See [Backends and output formats](docs/tools/backends.md)
 for the output each backend writes and how the choice changes it.
 There is no interpreter and no runtime to ship: a

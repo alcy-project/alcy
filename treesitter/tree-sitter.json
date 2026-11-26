@@ -4,7 +4,7 @@
     {
       "name": "alcy",
       "camelcase": "Alcy",
-      "title": "alcy",
+      "title": "Alcy",
       "scope": "source.alcy",
       "path": ".",
       "file-types": [
@@ -18,7 +18,7 @@
   "metadata": {
     "version": "0.1.0",
     "license": "Apache-2.0 WITH LLVM-exception",
-    "description": "alcy grammar for tree-sitter",
+    "description": "Alcy grammar for tree-sitter",
     "authors": [
       {
         "name": "The Alcy Project Authors"

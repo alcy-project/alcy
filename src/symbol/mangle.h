@@ -16,7 +16,7 @@
 // Deterministic encoding of a linkable symbol from the signature it
 // names. Every symbol the compiler defines is encoded this way, so a
 // source name can never collide with a C library entry point or with
-// another alcy item.
+// another Alcy item.
 namespace symbol {
 
 // What a symbol names. Two signatures encode to the same string only if
@@ -111,7 +111,7 @@ std::string mangle(const Signature& signature,
                    const ir::SymbolTable& strings);
 
 // Recovers a signature. A symbol that is truncated, carries an
-// unknown version, or is not alcy's becomes a structured error
+// unknown version, or is not Alcy's becomes a structured error
 // rather than a partial decode.
 enum class DemangleError : u8 {
   // Missing the alcy prefix: not our symbol.

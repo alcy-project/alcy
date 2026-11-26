@@ -1,6 +1,6 @@
 # `alcy lint`
 
-Static analyzer for alcy source. `lint` reads a package the same way
+Static analyzer for Alcy source. `lint` reads a package the same way
 the compiler does - parse, resolve, type-check - and adds opinion on
 top: style choices the language has no rule for, design conventions,
 maintainability reads. The compiler decides whether code is correct;

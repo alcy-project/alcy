@@ -96,7 +96,7 @@ behavior.
 
 To verify which CRT an artifact uses, inspect its directives, e.g.
 `llvm-readobj --coff-directives <lib>.lib | grep RuntimeLibrary` should show
-`MT_StaticRelease` / `MTd_StaticDebug` for alcy objects and LLVM libraries
+`MT_StaticRelease` / `MTd_StaticDebug` for Alcy objects and LLVM libraries
 alike.
 
 `verify_static_linkage.py` checks the built binaries on every

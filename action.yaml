@@ -5,9 +5,9 @@
 # from source is this repository's own workflows' business (see
 # .github/actions); a consumer only ever downloads a release.
 
-name: Set up alcy
+name: Set up Alcy
 description: >-
-  Install the alcy compiler CLI from this repository's releases and put
+  Install the alcy CLI from this repository's releases and put
   it on PATH. On Linux the binary links in-process with its embedded LLD
   and the host's C library; macOS and Windows builds drive a clang from
   PATH (macOS ships one) against the platform's C library (the MSVC STL

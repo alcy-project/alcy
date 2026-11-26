@@ -88,7 +88,7 @@ TEST_CASE("Init without a VCS leaves an existing ignore file alone") {
 
   PipelineContext ctx{i18n::Language::EnUs};
   // The ignore file belongs to the user, so its presence is not a reason
-  // to refuse: only the package files are alcy's to write.
+  // to refuse: only the package files are Alcy's to write.
   CHECK(init_package(ctx, dir.join("mine"), Vcs::None).is_ok());
   CHECK(io::read_file(dir.join("mine/.gitignore")) == "# mine\n");
 }

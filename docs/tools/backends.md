@@ -27,7 +27,7 @@ and ignore `--backend`.
 | `object` | relocatable object | relocatable ELF64 object | relocatable ELF64 object | - |
 | `asm` | textual assembly | textual assembly, AT&T or Intel | textual RISC-V assembly | rejected, see below |
 | `llvm-ir`, `llvm-bc` | textual IR / bitcode | - | - | - |
-| `ir`, `ir-bc` | alcy IR, written by the pipeline | alcy IR, written by the pipeline | alcy IR, written by the pipeline | alcy IR, written by the pipeline |
+| `ir`, `ir-bc` | Alcy IR, written by the pipeline | Alcy IR, written by the pipeline | Alcy IR, written by the pipeline | Alcy IR, written by the pipeline |
 
 `--emit=asm` writes one assembly source per target, with a `.s`
 suffix. It replaces an unnamed output's suffix like the other modes; it

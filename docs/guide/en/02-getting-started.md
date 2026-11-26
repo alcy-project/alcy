@@ -10,7 +10,7 @@ work in a worker in your browser.
 
 ## Build the compiler
 
-Building alcy natively needs GN, Ninja, Clang, LLD, and libc++. On Linux
+Building Alcy natively needs GN, Ninja, Clang, LLD, and libc++. On Linux
 and macOS, `nix develop` provides all of them; `src/docs/build.md`
 covers the other setups.
 

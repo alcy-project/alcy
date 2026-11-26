@@ -164,7 +164,7 @@ optimize_in_parts(std::vector<std::unique_ptr<llvm::Module>>& split,
         std::make_unique<llvm::raw_svector_ostream>(objects[task]));
   };
   // The backend's threads do the part work. LLVM's in-process ThinBackend
-  // has no hook alcy can put a scope on per task, so this one span names
+  // has no hook Alcy can put a scope on per task, so this one span names
   // all of it; the serial preparation above is measured per part.
   bool ran_ok = true;
   {

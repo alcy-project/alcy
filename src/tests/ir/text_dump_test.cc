@@ -196,7 +196,7 @@ TEST_CASE("The text view names blocks and values by their storage indices") {
   };
   const std::string text = write_text(input);
   const std::string want =
-      "// alcy ir, format 1, pointer width 64\n"
+      "// Alcy IR, format 1, pointer width 64\n"
       "\n"
       "fn choose(v0: bool, v1: i32, v2: i32) -> i32 {  // #0\n"
       "b0:\n"
@@ -237,7 +237,7 @@ TEST_CASE("Address names and spans ride as comments") {
   };
   const std::string text = write_text(input);
   const std::string want =
-      "// alcy ir, format 1, pointer width 64\n"
+      "// Alcy IR, format 1, pointer width 64\n"
       "\n"
       "fn main() -> i32 {  // #0\n"
       "b0:\n"
@@ -296,7 +296,7 @@ TEST_CASE("The preamble declares composites and externs") {
   };
   const std::string text = write_text(input);
   const std::string want = fmt::format(
-      "// alcy ir, format 1, pointer width 64\n"
+      "// Alcy IR, format 1, pointer width 64\n"
       "\n"
       "struct Point(i32, i32)  // #{}\n"
       "enum Shape {{ Circle(i32), Rect }}  // #{}\n"
@@ -380,7 +380,7 @@ TEST_CASE("The text view prints a const argument") {
   };
   const std::string text = write_text(input);
   const std::string want = fmt::format(
-      "// alcy ir, format 1, pointer width 64\n"
+      "// Alcy IR, format 1, pointer width 64\n"
       "\n"
       "struct ArrayVec<i32, const 4>()  // #{}\n"
       "\n",

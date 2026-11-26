@@ -1,7 +1,7 @@
 /// <reference types="tree-sitter-cli/dsl" />
 // @ts-check
 
-// The alcy grammar for tree-sitter.
+// The Alcy grammar for tree-sitter.
 //
 // The normative grammar is docs/spec/grammar.ebnf, and this file follows it
 // production for production. What EBNF cannot say lives in

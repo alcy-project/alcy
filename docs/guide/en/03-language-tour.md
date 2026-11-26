@@ -1,6 +1,6 @@
 # A tour of the language
 
-This tour follows the pieces of alcy the compiler accepts today. Every
+This tour follows the pieces of Alcy the compiler accepts today. Every
 program here is complete, and every `alcy` block on this page was
 compiled with the playground's compiler when the site was built, so each
 one runs there unchanged.
@@ -298,7 +298,7 @@ fn main() {
 }
 ```
 
-Lookups take the key by value because alcy keeps a borrowed temporary
+Lookups take the key by value because Alcy keeps a borrowed temporary
 live until the enclosing scope ends; pass a fresh `String` when the
 caller only holds a `str`. `get` borrows the value, and `keys`,
 `values`, and `iter` walk the table. `HashSet<T>` is built on the same

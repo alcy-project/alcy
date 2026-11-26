@@ -11,7 +11,7 @@
 
 namespace codegen::wasm {
 
-// The direct wasm backend: alcy's own emitter, which answers a wasm
+// The direct wasm backend: Alcy's own emitter, which answers a wasm
 // target with a final module and needs no linker behind it.
 struct Wasm {
   static constexpr codegen::Backend ID = codegen::Backend::DirectWasm;

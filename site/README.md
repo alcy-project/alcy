@@ -1,4 +1,4 @@
-# The alcy site
+# The Alcy site
 
 The published site is three kinds of page over one shell: the landing
 page, the [guide](../docs/guide/) under `/guide/`, and the

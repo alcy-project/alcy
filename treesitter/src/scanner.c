@@ -1,7 +1,7 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// The external scanner for the alcy grammar.
+// The external scanner for the Alcy grammar.
 //
 // Four tokens live here. Three cannot be written as a regular expression:
 //

@@ -18,7 +18,7 @@ the tools read alike and a change to the shape lands in one place:
   invocation) go through `die`, which reports and stops.
 
 The tools keep their own argparse and their own exit codes; this
-module owns only what a reader sees. A future tool written in alcy
+module owns only what a reader sees. A future tool written in Alcy
 reads the same three answers off a struct, which is why the methods
 take the pieces rather than preformatted lines.
 """
@@ -78,8 +78,8 @@ class CheckResult:
     """What a check ran and how it went, before anything is printed.
 
     A tool's main builds one of these from its work and hands it to a
-    Logger (or a future alcy runner) to report; the shape, not the
-    printing, is what an alcy rewrite carries over.
+    Logger (or a future Alcy runner) to report; the shape, not the
+    printing, is what an Alcy rewrite carries over.
     """
 
     def __init__(self, label: str) -> None:

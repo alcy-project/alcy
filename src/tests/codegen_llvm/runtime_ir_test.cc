@@ -33,7 +33,7 @@ llvm::FunctionType* signature(llvm::Type* return_type,
 // Checks one entry point is defined with the expected signature. The
 // call sites the program emitted hold the declaration, so a mismatch
 // here would only surface as a verifier error much later. The linkage is
-// part of the contract for the same reason: an object alcy writes
+// part of the contract for the same reason: an object Alcy writes
 // carries the whole runtime, so a second object in one image defines
 // these again unless each definition is discardable. On COFF the
 // comdat is part of that contract too: the format resolves a weak

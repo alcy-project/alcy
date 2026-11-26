@@ -322,7 +322,7 @@ frames. Direct backends do no optimization and ignore the setting.
   function, associated function, or method), and the type arguments of
   the instantiation. A source name never reaches the linker, so no
   program can collide with a C library entry point or with another
-  alcy item.
+  Alcy item.
 - The encoding is deterministic: the same signature yields the same
   symbol in any lowering order, so a profiler, a debugger, and a
   backtrace all read the same name.
@@ -387,5 +387,5 @@ frames. Direct backends do no optimization and ignore the setting.
   platform's C ABI. A struct crossing it does so under `#[repr(C)]`,
   which fixes its layout. An enum cannot use that C contract: its
   discriminant's placement is the compiler's choice. `#[layout(tag_size
-  = N)]` sets a width in alcy bytes, not a C ABI type.
+  = N)]` sets a width in Alcy bytes, not a C ABI type.
   The internal calling convention is not a promise.

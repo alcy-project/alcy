@@ -49,7 +49,7 @@ codegen::Target wasm_target() {
   return target.has_value() ? *target : codegen::host_target();
 }
 
-// The context every call runs in: the wasm machine and alcy's own
+// The context every call runs in: the wasm machine and Alcy's own
 // emitter, so a native build of this API answers what the wasm build
 // does and a host can test either.
 void prepare(pipeline::PipelineContext& ctx) {

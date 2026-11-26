@@ -1,4 +1,4 @@
-(* alcy grammar, EBNF transcription.
+(* Alcy grammar, EBNF transcription.
  *
  * A living document: it follows the parser, not the other way around.
  * Changing the grammar means changing this file in the same commit.

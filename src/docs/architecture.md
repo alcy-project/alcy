@@ -1,7 +1,7 @@
 # Architecture
 
-This document describes the intended architecture of the alcy compiler
-as it stands: a working compiler that translates alcy source code into
+This document describes the intended architecture of the Alcy compiler
+as it stands: a working compiler that translates Alcy source code into
 executables. Implementation details may differ while the project is
 under development; this document is updated when the design or its
 architectural contracts change.
@@ -17,7 +17,7 @@ These govern the compiler's implementation. For the principles the
 *language* is built to hold - which decide language design questions
 rather than code layout - see [principles.md](../../docs/principles.md).
 
-When implementing or modifying any component in alcy, preserve the following
+When implementing or modifying any component in Alcy, preserve the following
 principles:
 
 - **Clear Responsibilities & Module Boundaries**: Each module should have a
@@ -60,8 +60,8 @@ principles:
 
 ## Overview
 
-alcy is a statically-typed programming language with ownership-based memory
-management. The reference compiler is written in C++20. It lowers alcy source
+Alcy is a statically-typed programming language with ownership-based memory
+management. The reference compiler is written in C++20. It lowers Alcy source
 code to LLVM IR for optimized builds, and to its own x86_64 and riscv64
 objects for native debug builds on Linux, with no LLVM in the path.
 
@@ -202,9 +202,9 @@ state between stages beyond the data explicitly passed along.
 | `source`                  | Source file registry: memory-mapped file loading with stable file ids.                                                                                | Mapped files plus small owned tables.                                           |
 | `codegen`                 | The backend seam: `Backend`, `EmitRequest`, `Target`, and the dispatch. Implementations live beside it; the pipeline names only the seam.             | N/A - dispatch only.                                                            |
 | `codegen_llvm`            | Emits LLVM IR from analyzed IR, and the module to an object, textual IR, or bitcode. `Target` says what it builds for.                                | Local API buffers only.                                                         |
-| `codegen/wasm`            | alcy's own wasm emitter: verified IR in, a final WASI module out, no LLVM or linker behind it. Reached with `--backend=direct-wasm`.                  | The module is built in memory, one pass.                                        |
-| `codegen/x86_64`          | alcy's own x86_64 emitter: verified IR in, an ELF64 object out, no LLVM behind it. The native debug default; `--backend=direct-x86_64`.               | One object in memory, emitted in one pass.                                      |
-| `codegen/riscv64`         | alcy's own riscv64 emitter: verified IR in, an ELF64 object or assembly out, no LLVM behind it. The riscv64 debug default; `--backend=direct-riscv64`.   | One object in memory, emitted in one pass.                                      |
+| `codegen/wasm`            | Alcy's own wasm emitter: verified IR in, a final WASI module out, no LLVM or linker behind it. Reached with `--backend=direct-wasm`.                  | The module is built in memory, one pass.                                        |
+| `codegen/x86_64`          | Alcy's own x86_64 emitter: verified IR in, an ELF64 object out, no LLVM behind it. The native debug default; `--backend=direct-x86_64`.               | One object in memory, emitted in one pass.                                      |
+| `codegen/riscv64`         | Alcy's own riscv64 emitter: verified IR in, an ELF64 object or assembly out, no LLVM behind it. The riscv64 debug default; `--backend=direct-riscv64`.   | One object in memory, emitted in one pass.                                      |
 | `diag`                    | Stands for `diagnostic`. Source spans, diagnostics, arena-backed bags, and the fmtlib renderer.                                                       | Zero heap allocation on hot paths; message bytes use an injected arena.         |
 | `i18n`                    | Stands for `internationalization`. The languages the compiler reports in, and the catalog that holds every message it can print.                      | Catalog strings are static; the cli owns the composed copies.                   |
 | `text`                    | Text primitives shared across stages: escape decoding for string literals, and JSON reading and writing.                                              | Owned strings; cold paths only.                                                 |
@@ -510,7 +510,7 @@ that happens to read them.
    It is the stage after lowering, not part of the analyzer.
 
 6. **Code generation** - the backend walks verified basic blocks and
-   lowers alcy IR operations to LLVM IR. The program runtime — `alcy_alloc`,
+   lowers Alcy IR operations to LLVM IR. The program runtime — `alcy_alloc`,
    `alcy_dealloc`, `alcy_print`, `alcy_println`, `alcy_panic`, and
    `alcy_sys_write`, over libc — is defined in that same module, so a build
    spawns no compiler for it and it is optimized with the program. The
@@ -578,11 +578,11 @@ contributor-facing rules are in
 | Property tests | A relation between two computations | every build | The relation holds for every input, or names a counterexample |
 | Hostile input | The call returns | every build | A generated or random input does not crash or trip a sanitizer |
 | Sanitizers | AddressSanitizer | every debug build | No use-after-free, no out-of-bounds access |
-| Sanitizers, generated code | AddressSanitizer over alcy's output | `ci.yaml`, on Ubuntu | A wrong code-generation decision is not a memory bug in the program it emitted |
+| Sanitizers, generated code | AddressSanitizer over Alcy's output | `ci.yaml`, on Ubuntu | A wrong code-generation decision is not a memory bug in the program it emitted |
 | Fuzzing | Coverage-guided mutation | on demand | No input reaches a state the existing oracles miss |
 | Coverage | A recorded baseline | `ci.yaml`, and `check.py` | Line coverage of `src/` did not decrease |
 
-All but fuzzing run in CI. The sanitizers on alcy's own output and the
+All but fuzzing run in CI. The sanitizers on Alcy's own output and the
 coverage ratchet have an answer for every input, so running them on every
 change is worth its cost. The fuzzer's answer depends on where its corpus
 has got to, so a per-push run would mostly re-verify what it already
@@ -625,7 +625,7 @@ filesystem or writing an output artifact.
 
 ## System invariants
 
-- **User-input robustness**: Invalid alcy source must result in diagnostics,
+- **User-input robustness**: Invalid Alcy source must result in diagnostics,
   not an assertion, undefined behavior, or process crash. Internal compiler
   invariant violations may fail fast.
 
@@ -717,7 +717,7 @@ provides a stable foundation for evaluating them.
 The long-term project goal is to self-host the toolchain: once the
 compiler, build system, core/alloc/std libraries, and surrounding tools
 (formatter, linter, LSP, setup action) are complete, the entire toolchain
-is rewritten in alcy and the C++ implementation retired. The grammar in
+is rewritten in Alcy and the C++ implementation retired. The grammar in
 `treesitter/` is written in JavaScript because tree-sitter generates its
 parser from it, so self-hosting means a grammar for the grammar rather
 than a rewrite of this one.

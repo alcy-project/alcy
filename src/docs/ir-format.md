@@ -1,6 +1,6 @@
 # The IR format
 
-alcy's lowered IR has two written forms:
+Alcy's lowered IR has two written forms:
 
 - **text** (`--emit=ir`, `.ir`) is a view for people. It is write-only:
   there is no parser, and nothing reads it back.
@@ -35,15 +35,15 @@ so a verifier message and a dump name the same row.
 
 - One declaration or instruction per line. `//` starts a comment that
   runs to the end of the line; the first line is
-  `// alcy ir, format 1, pointer width <N>`.
+  `// Alcy IR, format 1, pointer width <N>`.
 - `vN` names a register (N is its storage index), `bN` a block. Nothing
   else starts with `v` or `b` followed by digits, so no quoting is
   needed.
 - `#N` after a name is the storage index of the row being named
   (function, struct, enum, external), written where two rows could
   share a name.
-- Strings are printed as alcy string literals (double quotes, the
-  escapes alcy accepts: `\n`, `\t`, `\\`, `\"`, `\0`, `\xNN`, `\u{…}`).
+- Strings are printed as Alcy string literals (double quotes, the
+  escapes Alcy accepts: `\n`, `\t`, `\\`, `\"`, `\0`, `\xNN`, `\u{…}`).
 - Integers print as decimal, signed tags with their two's-complement
   value. Floats print as the shortest round-trippable decimal, with
   `inf`, `-inf`, and `nan` for the non-finite values. A `bool`
@@ -53,7 +53,7 @@ so a verifier message and a dump name the same row.
 ### 2.2 Preamble
 
 ```text
-// alcy ir, format 1, pointer width 64
+// Alcy IR, format 1, pointer width 64
 // prelude: 812 functions
 
 struct Vec<u8>(ptr, u32)          // #12
@@ -132,7 +132,7 @@ A type prints as one of:
 ### 2.5 Instructions
 
 `dst` is shown as `vN =` when the instruction defines one. Operators
-print with alcy's spellings; the operand types determine the signedness
+print with Alcy's spellings; the operand types determine the signedness
 and shift flavour the storage records, so the spelling is derivable.
 Named values (`@function`, immutables) print inline.
 

@@ -362,7 +362,7 @@ std::string footer(const Stamp& stamp) {
                                ? text
                                : "<a href=\"" + escape_attribute(stamp.url) +
                                      "\" rel=\"noopener\">" + text + "</a>";
-  return "<footer class=\"site-footer\">\n      <span>alcy build " + mark +
+  return "<footer class=\"site-footer\">\n      <span>Alcy build " + mark +
          "</span>\n      <a href=\"https://github.com/alcy-project/alcy\" "
          "rel=\"noopener\">GitHub</a>\n    </footer>";
 }
@@ -425,7 +425,7 @@ std::string site_header(const Catalog& catalog,
               std::string(drawer_markup) + "\n      </div>\n";
   }
   out += "<header class=\"site-header\">\n";
-  out += "      <a class=\"site-brand\" href=\"" + home + "\">alcy</a>\n";
+  out += "      <a class=\"site-brand\" href=\"" + home + "\">Alcy</a>\n";
   out += "      <nav class=\"site-nav\" aria-label=\"" + t("site.nav") +
          "\">\n" + nav + "      </nav>\n      " + drawer + settings +
          "\n    </header>";
@@ -488,7 +488,7 @@ std::string render_guide_page(const DocPage& page, const PageOptions& options) {
   out += "    <meta name=\"description\" content=\"" +
          escape_html(description) + "\" />\n";
   out += "    <title>" + escape_html(page.title) + " " + MIDDLE_DOT +
-         " alcy</title>\n";
+         " Alcy</title>\n";
   out += "    <script>" + std::string(options.boot) + "</script>\n";
   out += "    " + catalog_map(assets, options.language) + "\n";
   out += "    <link rel=\"stylesheet\" href=\"" + assets +
@@ -506,7 +506,7 @@ std::string render_guide_page(const DocPage& page, const PageOptions& options) {
   out += "    <link rel=\"icon\" href=\"" + assets + "favicon.svg\" />\n";
   out += "    " + page_links(catalog, options.language, page.path) + "\n";
   out += "    " +
-         social_meta(std::string(page.title) + " " + MIDDLE_DOT + " alcy",
+         social_meta(std::string(page.title) + " " + MIDDLE_DOT + " Alcy",
                      description, page.route) +
          "\n";
   out += "    " + speculation_rules() + "\n";
@@ -573,7 +573,7 @@ std::string render_tree_index(const std::vector<DocPage>& pages,
       "initial-scale=1\" />\n";
   out += "    <meta name=\"description\" content=\"" +
          escape_html(t(tree.summary_key)) + "\" />\n";
-  out += "    <title>" + label + " " + MIDDLE_DOT + " alcy</title>\n";
+  out += "    <title>" + label + " " + MIDDLE_DOT + " Alcy</title>\n";
   out += "    <script>" + std::string(boot) + "</script>\n";
   out += "    " + catalog_map(assets, language) + "\n";
   out += "    <link rel=\"stylesheet\" href=\"" + assets +
@@ -586,7 +586,7 @@ std::string render_tree_index(const std::vector<DocPage>& pages,
       page_links(catalog, language, std::string(tree.segment) + "/index.html") +
       "\n";
   out += "    " +
-         social_meta(label + " " + MIDDLE_DOT + " alcy", t(tree.summary_key),
+         social_meta(label + " " + MIDDLE_DOT + " Alcy", t(tree.summary_key),
                      route) +
          "\n";
   out += "    " + speculation_rules() + "\n";
@@ -664,7 +664,7 @@ std::string render_not_found(
       "    <meta name=\"viewport\" content=\"width=device-width, "
       "initial-scale=1\" />\n";
   out += "    <meta name=\"robots\" content=\"noindex\" />\n";
-  out += "    <title>Page not found " + MIDDLE_DOT + " alcy</title>\n";
+  out += "    <title>Page not found " + MIDDLE_DOT + " Alcy</title>\n";
   out += "    <script>\n";
   out += "      (() => {\n";
   out += "        const base = document.createElement(\"base\");\n";
@@ -683,7 +683,7 @@ std::string render_not_found(
   out += "  <body class=\"site\">\n";
   out += "    <a class=\"skip-link\" href=\"#content\">Skip to content</a>\n";
   out += "    <header class=\"site-header\">\n";
-  out += "      <a class=\"site-brand\" href=\"./\">alcy</a>\n";
+  out += "      <a class=\"site-brand\" href=\"./\">Alcy</a>\n";
   out += "      <nav class=\"site-nav\" aria-label=\"Site\">\n";
   out += "        <a href=\"guide/\">Guide</a>\n";
   out += "        <a href=\"reference/\">Reference</a>\n";

@@ -1,6 +1,6 @@
 # fmt
 
-The source formatter. It reads alcy source and writes it back in one
+The source formatter. It reads Alcy source and writes it back in one
 canonical layout.
 
 The formatter is a library, not a compiler stage: the compiler never

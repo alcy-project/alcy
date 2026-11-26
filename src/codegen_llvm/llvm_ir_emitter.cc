@@ -1244,7 +1244,7 @@ llvm::Function* LlvmIrEmitter::create_function(
       break;
     case ir::InlineKind::None: break;
   }
-  // There is no unwinding in alcy; `panic` aborts.
+  // There is no unwinding in Alcy; `panic` aborts.
   llvm_function->setDoesNotThrow();
   return llvm_function;
 }

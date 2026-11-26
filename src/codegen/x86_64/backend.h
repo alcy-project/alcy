@@ -12,7 +12,7 @@
 
 namespace codegen::x86_64 {
 
-// The direct x86_64 backend: alcy's own emitter, which answers a Linux
+// The direct x86_64 backend: Alcy's own emitter, which answers a Linux
 // x86_64 target with a relocatable object the link step turns into a
 // program. It exists so a debug build does not wait on LLVM, and it
 // grows its lowering op by op rather than inheriting one.

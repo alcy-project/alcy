@@ -1,4 +1,4 @@
-# alcy Language Specification - Overview
+# Alcy Language Specification - Overview
 
 This is the language a program is written against, and nothing else. It
 states what a conforming implementation does, never how this one does it:

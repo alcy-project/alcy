@@ -130,7 +130,7 @@ the dependency graph are declared in the suite's own `alcy.toml`.
   library sources already are. Summary-carrying artifacts and
   cross-package compilation follow the whole-program-analysis,
   per-package-emission model (see `deferred.md`).
-- Symbol mangling for the alcy convention is per-signature and starts
+- Symbol mangling for the Alcy convention is per-signature and starts
   `_A`: the encoding derives from what the symbol names - the module
   path, the owner of a member, the item name, what the item is, and
   the type arguments of the instantiation - so a source name never

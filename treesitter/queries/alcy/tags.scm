@@ -1,4 +1,4 @@
-; Code navigation for alcy: what is defined here and what is referred to.
+; Code navigation for Alcy: what is defined here and what is referred to.
 
 ; Definitions ---------------------------------------------------------------
 

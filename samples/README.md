@@ -1,6 +1,6 @@
 # Samples
 
-Programs written in alcy, kept because they are worth reading. Each is a
+Programs written in Alcy, kept because they are worth reading. Each is a
 directory holding a `main.al` and a `case.toml`, which is the same shape
 as a case under `e2e/cases`, and the same harness runs them:
 
@@ -23,10 +23,10 @@ are examples that cannot quietly rot.
 
 ## What they do not show
 
-They are not a tour of the language. Several things alcy has are absent
+They are not a tour of the language. Several things Alcy has are absent
 here: no sample builds a `String`, and every one prints line by line.
 That is also why these are small — the exercises are the ones a reader
-already knows the shape of, so the reading is about alcy rather than
+already knows the shape of, so the reading is about Alcy rather than
 about the algorithm.
 
 ## Writing one

@@ -594,7 +594,7 @@ std::vector<u8> serialize_package_ir(PipelineContext& ctx,
   return ir::serialize(write_input.input);
 }
 
-// The alcy IR text view. It runs before the backend is consulted, because
+// The Alcy IR text view. It runs before the backend is consulted, because
 // the form belongs to the pipeline: a build with no code generator still
 // writes it.
 base::Result<void, diag::Reported> emit_package_ir_text(

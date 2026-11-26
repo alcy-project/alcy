@@ -265,7 +265,7 @@ jobs:
         run: uv run ./tools/check_coverage.py --no-build --limit=0
 
   # The layer that can see a wrong code-generation decision become memory
-  # corruption: the generated program is instrumented, which alcy cannot
+  # corruption: the generated program is instrumented, which Alcy cannot
   # do to an object it wrote itself, so the case goes through
   # --emit=llvm-ir and clang. Refuses rather than degrading where clang
   # is absent, so this job cannot pass without having run.

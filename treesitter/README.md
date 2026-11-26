@@ -1,4 +1,4 @@
-# The alcy grammar for tree-sitter
+# The Alcy grammar for tree-sitter
 
 The grammar here is a second reading of the language. The first is the
 compiler; the normative statement of what is being read is

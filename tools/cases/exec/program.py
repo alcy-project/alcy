@@ -24,7 +24,7 @@ from utils.paths import project_root_dir
 
 SANITIZERS = ["-fsanitize=address,undefined", "-fno-omit-frame-pointer", "-g"]
 
-# The system compiler, not alcy's, is what instruments a generated
+# The system compiler, not Alcy's, is what instruments a generated
 # program. Without it the sanitized run cannot happen, and asking for one
 # that cannot happen is a refusal rather than a downgrade: see main().
 SYSTEM_CLANG = shutil.which("clang")
@@ -51,7 +51,7 @@ def mark_instrumentable(ir: Path) -> None:
 
     A front end carries `-fsanitize=address` into each function it emits
     as the `sanitize_address` attribute, and the instrumentation pass
-    reaches only functions that carry it. The alcy IR names no
+    reaches only functions that carry it. The Alcy IR names no
     sanitizer, so a module handed straight to clang links the runtime
     while every load and store stays unchecked, and the leak scan at
     exit is the only half that still reports. Setting the attribute on
@@ -66,7 +66,7 @@ def mark_instrumentable(ir: Path) -> None:
 def build_sanitized(alcy: Path, work: Path, is_package: bool, exe: Path, args):
     """Builds the case through textual IR so the sanitizers can reach it.
 
-    alcy writes an object straight from an LLVM TargetMachine, with no
+    Alcy writes an object straight from an LLVM TargetMachine, with no
     external compiler in the path, so the code it generates cannot be
     instrumented after the fact. Textual IR can: the module is handed to
     clang, which both compiles and instruments it, runtime included.

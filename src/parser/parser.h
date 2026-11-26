@@ -338,7 +338,7 @@ class Parser {
   // be a test.
   bool apply_test_marker(ast::ItemIdx item, diag::Span span);
   // An item spelled like a neighboring language's keyword (`func`,
-  // `trait`, `import`) is parsed as the item it meant; `mod` has no alcy
+  // `trait`, `import`) is parsed as the item it meant; `mod` has no Alcy
   // form and is reported and skipped.
   std::optional<ast::ItemIdx> parse_spelled_item(bool is_pub,
                                                  bool is_unsafe,
@@ -350,7 +350,7 @@ class Parser {
   ast::ItemIdx parse_intrinsic_fn(bool is_pub, bool is_unsafe);
   ast::ItemIdx parse_extern(bool is_pub);
   bool parse_fn_params(std::vector<ast::ItemFnParam>& params);
-  // Rust's `&self` / `&mut self` receiver, which alcy spells as the
+  // Rust's `&self` / `&mut self` receiver, which Alcy spells as the
   // binding and its reference type.
   bool ref_self_parameter_shape() const;
   ast::TypeIdx ref_self_type(bool is_mut, diag::Span span);
@@ -452,7 +452,7 @@ class Parser {
   // Reads a turbofish argument list; `<` and its `::` are consumed.
   bool parse_turbofish(std::vector<ast::TypeIdx>& type_args);
   ast::CondIdx parse_cond();
-  // Rust's `if let PAT = EXPR`, which alcy spells `if PAT := EXPR`
+  // Rust's `if let PAT = EXPR`, which Alcy spells `if PAT := EXPR`
   //. Nothing means an ordinary condition.
   std::optional<ast::CondIdx> parse_spelled_condition();
   bool consume_gt();

@@ -102,7 +102,7 @@ TEST_CASE("The ir mode writes the lowered package beside the source") {
     return;
   }
   // The width follows the run's target, so the wasm test host says 32.
-  CHECK(text->starts_with("// alcy ir, format 1, pointer width "));
+  CHECK(text->starts_with("// Alcy IR, format 1, pointer width "));
   CHECK(text->find("// prelude:") != std::string::npos);
   CHECK(text->find("fn main(") != std::string::npos);
 }

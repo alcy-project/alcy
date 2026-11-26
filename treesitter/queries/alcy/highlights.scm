@@ -1,4 +1,4 @@
-; Highlighting for alcy.
+; Highlighting for Alcy.
 ;
 ; The captures name the kind of thing rather than its spelling, so a theme
 ; decides what a keyword and a builtin look like. A node with a field says

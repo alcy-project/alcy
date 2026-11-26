@@ -540,7 +540,7 @@ TEST_CASE("Compile emits textual IR") {
   }
 }
 
-TEST_CASE("Compile emits alcy ir text") {
+TEST_CASE("Compile emits Alcy IR text") {
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_compile_alcy_ir_");
   const bool setup = write_all(dir, "main.al",
                                "fn main() -> i32 {\n"
@@ -564,7 +564,7 @@ TEST_CASE("Compile emits alcy ir text") {
   const std::optional<std::string> text = io::read_file(out);
   CHECK(text.has_value());
   if (text.has_value()) {
-    CHECK(text->starts_with("// alcy ir, format 1, pointer width "));
+    CHECK(text->starts_with("// Alcy IR, format 1, pointer width "));
     CHECK(text->find("fn main(") != std::string::npos);
   }
 }

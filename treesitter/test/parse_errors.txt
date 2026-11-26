@@ -1,4 +1,4 @@
-# alcy sources this grammar must reject.
+# Alcy sources this grammar must reject.
 #
 # Each line names a case under e2e/cases/ whose failure to compile is a
 # failure to parse, so the rejection belongs in the grammar rather than in a

@@ -351,9 +351,9 @@ std::unordered_map<std::string, std::string> template_values_for(
       ssg::site_header(context.catalog, route, language, tree_path, current);
   values["pageLinks"] = ssg::page_links(context.catalog, language, tree_path);
   const std::string title =
-      is_playground ? "alcy " + ssg::translate(context.catalog, language,
+      is_playground ? "Alcy " + ssg::translate(context.catalog, language,
                                                "site.playground")
-                    : std::string("alcy");
+                    : std::string("Alcy");
   const std::string description =
       ssg::translate(context.catalog, language,
                      is_playground ? "meta.playground" : "meta.landing");

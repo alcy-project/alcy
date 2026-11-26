@@ -1,6 +1,6 @@
-# The alcy playground
+# The Alcy playground
 
-A browser playground for alcy: edit a program, have it checked, and run it,
+A browser playground for Alcy: edit a program, have it checked, and run it,
 with no server behind the page. The page is plain HTML, CSS, and
 TypeScript, and the compiler is the project's own wasm module, built
 without LLVM through the direct wasm backend.

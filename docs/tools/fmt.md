@@ -1,6 +1,6 @@
 # `alcy fmt`
 
-Reformat alcy source to the compiler's canonical layout. `fmt` is the
+Reformat Alcy source to the compiler's canonical layout. `fmt` is the
 same on every machine for every input and does not consult an
 environment variable, a config file, or a terminal's capabilities.
 

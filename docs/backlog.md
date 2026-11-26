@@ -291,7 +291,7 @@ replaced. The foundations are in `roadmap.md`.
   only one of them belongs there. A case that asserts on a program which
   should work - a snippet the pipeline accepts, a borrow the checker
   allows, a value that lowers to the shape it should - is a statement
-  about alcy source, and it is written in C++ only because the standard
+  about Alcy source, and it is written in C++ only because the standard
   library had nowhere to state its own behaviour until `alcy test` could
   compile a block. Such a case goes in a `#[test] fn` in the std module
   whose behaviour it describes, so `alcy test lib/std/<member>` runs it

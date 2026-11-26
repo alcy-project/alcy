@@ -380,7 +380,7 @@ class RuntimeBuilder {
                                        "alcy.runtime.text", 0, &module_);
   }
 
-  // Every entry point is `linkonce_odr`: an object alcy writes carries
+  // Every entry point is `linkonce_odr`: an object Alcy writes carries
   // the whole runtime, so two of them in one image would each define
   // `alcy_*`, and a discardable definition is what lets the linker keep
   // one copy and the optimizer drop what no program calls. On COFF a

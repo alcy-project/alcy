@@ -254,7 +254,7 @@ ast::ExprIdx Parser::parse_unary() {
   const usize mark = pos_;
   // An increment or decrement written in prefix position is a
   // neighboring language's spelling; the message names the
-  // statement alcy writes. `--i` would otherwise read as negation
+  // statement Alcy writes. `--i` would otherwise read as negation
   // twice, which parses and means something else.
   if ((check(lexer::TokenKind::Plus) || check(lexer::TokenKind::Minus)) &&
       peek_kind() == peek_kind(1) && doubled_text(pos_)) {
@@ -491,7 +491,7 @@ ast::ExprIdx Parser::parse_postfix() {
     } else if (check(lexer::TokenKind::Plus) ||
                check(lexer::TokenKind::Minus)) {
       // A postfix increment or decrement is the same neighboring
-      // spelling; the message names the statement alcy writes, and the
+      // spelling; the message names the statement Alcy writes, and the
       // tokens are consumed so the walk continues. A site is one
       // doubled pair, so a chain (`i++ ++`) reports at each pair the
       // reader wrote.

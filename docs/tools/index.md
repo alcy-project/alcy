@@ -1,4 +1,4 @@
-# alcy command reference (Tools)
+# Alcy command reference (Tools)
 
 The [README](../../README.md) calls `alcy` one command for the whole
 development loop. This page is that claim in detail: every subcommand,
@@ -99,7 +99,7 @@ interleaved with it:
 
 Exit codes and JSON are one contract: a tool that reads the document
 ignores the exit code, a script that reads neither stays broken. Use
-`--json` when you are programming against alcy; use the exit code when
+`--json` when you are programming against Alcy; use the exit code when
 you are scripting it.
 
 ## Exit codes
@@ -187,7 +187,7 @@ Where a build setting comes from is part of the command's contract:
 ## Where things live
 
 - `docs/spec/` - the normative language. Rules a program can observe.
-- `docs/guide/` - reading order for humans new to alcy.
+- `docs/guide/` - reading order for humans new to Alcy.
 - `docs/tools/` - this page: the command line itself.
 - `src/docs/` - how the compiler is put together.
 

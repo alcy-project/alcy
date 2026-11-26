@@ -133,5 +133,5 @@ For the record, so that a future change does not relitigate them:
 - A `dyn`-shaped value with reference-counted or garbage-collected
   dispatch. Dispatch is monomorphized or explicit.
 - A design where the safe subset cannot express a systems program. If
-  safe alcy cannot write a driver, the language has failed at its goal
+  safe Alcy cannot write a driver, the language has failed at its goal
   regardless of what `unsafe` allows.

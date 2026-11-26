@@ -295,7 +295,7 @@ class TextWriter {
   void write_header() {
     const u32 width = input_.width == PointerWidth::W64 ? 64 : 32;
     fmt::format_to(std::back_inserter(out_),
-                   "// alcy ir, format 1, pointer width {}\n", width);
+                   "// Alcy IR, format 1, pointer width {}\n", width);
     if (prelude_ != 0) {
       fmt::format_to(std::back_inserter(out_), "// prelude: {} functions\n",
                      prelude_);

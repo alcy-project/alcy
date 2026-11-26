@@ -44,7 +44,7 @@ QUERIES = [
     GRAMMAR_DIR / "queries" / "alcy" / "highlights.scm",
     GRAMMAR_DIR / "queries" / "alcy" / "tags.scm",
 ]
-# Every directory in the repository that holds alcy sources. A file the
+# Every directory in the repository that holds Alcy sources. A file the
 # compiler accepts is one whose tree this grammar has to agree with.
 SOURCE_ROOTS = ["lib", "e2e", "samples", "benchmarks"]
 

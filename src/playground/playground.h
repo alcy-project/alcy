@@ -45,7 +45,7 @@ typedef struct AlcyResult {
 i32 alcy_check(const u8* src, usize len, AlcyResult* out);
 
 // Compiles `src` to a wasm module for wasm32, the way
-// `alcy compile --target=wasm32-unknown-emscripten` does with alcy's own
+// `alcy compile --target=wasm32-unknown-emscripten` does with Alcy's own
 // emitter. Returns 1 when the module was produced and 0 when it was not;
 // `out` is always filled.
 i32 alcy_compile(const u8* src, usize len, AlcyResult* out);

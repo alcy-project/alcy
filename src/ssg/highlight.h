@@ -24,7 +24,7 @@ class Highlight {
   Highlight(Highlight&& other) noexcept;
   Highlight& operator=(Highlight&& other) noexcept;
 
-  // Renders the HTML for a block of alcy source: one
+  // Renders the HTML for a block of Alcy source: one
   // `<span class="hl-...">` run per highlight, HTML-escaped otherwise.
   std::string highlight_code(std::string_view code) const;
 
@@ -36,7 +36,7 @@ class Highlight {
       const std::string& highlights_path);
 };
 
-// Creates a highlighter over the in-process alcy grammar. The query
+// Creates a highlighter over the in-process Alcy grammar. The query
 // is read from `highlights_path`; the parse table is the compiled
 // grammar linked into the generator.
 base::Result<Highlight, std::string> create_highlighter(

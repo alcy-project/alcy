@@ -1,6 +1,6 @@
 # codegen_llvm
 
-LLVM emission for verified alcy IR: one package to an `llvm::Module`, and
+LLVM emission for verified Alcy IR: one package to an `llvm::Module`, and
 that module to an object, textual IR, or bitcode.
 
 `Target` says what is being built for. It is one value - the triple and
@@ -35,7 +35,7 @@ that still carries LLVM's default layout answers those for the host.
   path checks the type it builds against the module's data layout on
   every build rather than skipping the comparison.
 - Debug builds recheck the *generated LLVM module* with
-  `llvm::verifyModule`, not the alcy IR: re-running the alcy
+  `llvm::verifyModule`, not the Alcy IR: re-running the Alcy
   verifier would repeat build-time work.
 
 ## Not here yet
