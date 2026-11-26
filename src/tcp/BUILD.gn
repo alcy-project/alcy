@@ -1,0 +1,33 @@
+# Copyright 2026 The Alcy Project Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# A small blocking TCP stream layer. It owns sockets and their platform
+# differences, and knows nothing about the protocol carried on them.
+source_set("tcp") {
+  sources = [
+    "connection.cc",
+    "connection.h",
+    "endpoint.cc",
+    "endpoint.h",
+    "error.cc",
+    "error.h",
+    "init.cc",
+    "init.h",
+    "listener.cc",
+    "listener.h",
+    "tcp.cc",
+    "tcp.h",
+  ]
+
+  deps = [
+    "//src/config",
+    "//third_party/fpag",
+  ]
+
+  configs += [
+    "//src:alcy_config",
+    "//src:win_sys_libs",
+  ]
+
+  public_configs = [ "//src:alcy_config" ]
+}

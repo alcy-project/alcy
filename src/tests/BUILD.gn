@@ -112,6 +112,7 @@ executable("tests") {
     "source/source_test.cc",
     "source/virtual_source_test.cc",
     "symbol/mangle_test.cc",
+    "tcp/tcp_test.cc",
     "test_main.cc",
     "testgen/driver_test.cc",
     "text/json_test.cc",
@@ -174,6 +175,7 @@ executable("tests") {
     "//src/fmt:alcy_fmt",
     "//src/linter",
     "//src/lsp",
+    "//src/tcp",
     "//third_party/doctest",
     "//third_party/toml",
   ]
