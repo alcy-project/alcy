@@ -180,6 +180,11 @@ Named values (`@function`, immutables) print inline.
 | `CompValue` | `v = comp_value(N)`, a value at index `N` of the side table |
 | `CompStrByte` | `v = comp_str_byte(s, i)`, byte `i` of a compile-time string |
 | `CompStrSlice` | `v = comp_str_slice(s, start, end)`, a view of a compile-time string |
+| `CompVariantTag` | `v = comp_variant_tag(x)`, the runtime variant of a semantic enum |
+| `CompField` | `v = comp_field(x, i)`, field `i` of a semantic aggregate |
+| `CompArrayIndex` | `v = comp_array_index(a, i)`, element `i` of a semantic array |
+| `CompMakeVariant` | `v = comp_make_variant(tag, fields...)`, an enum assembled at runtime |
+| `CompStrLen` | `v = comp_str_len(s)`, the length of a semantic string |
 
 `CompValue` and `CompStrByte` are semantic-only: the verifier refuses
 them in a resolved body. Synthetic functions used by comp evaluation
