@@ -1,5 +1,6 @@
 // The platform errno maps to a stable portable kind. An unmapped
-// number is Other, not a raw kind that happens to look valid.
+// number is Other, not a raw kind that happens to look valid. EAGAIN
+// is deliberately omitted: its number differs between Linux and BSD.
 use sys::error::ErrorKind;
 use sys::error::kind_of;
 
@@ -33,23 +34,20 @@ fn main() -> i32 {
   if name(kind_of(4)) != 1 {
     ret 1
   }
-  if name(kind_of(11)) != 2 {
+  if name(kind_of(2)) != 3 {
     ret 2
   }
-  if name(kind_of(2)) != 3 {
+  if name(kind_of(13)) != 4 {
     ret 3
   }
-  if name(kind_of(13)) != 4 {
+  if name(kind_of(32)) != 5 {
     ret 4
   }
-  if name(kind_of(32)) != 5 {
+  if name(kind_of(22)) != 6 {
     ret 5
   }
-  if name(kind_of(22)) != 6 {
-    ret 6
-  }
   if name(kind_of(9999999)) != 0 {
-    ret 7
+    ret 6
   }
   ret 0
 }
