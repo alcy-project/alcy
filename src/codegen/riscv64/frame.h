@@ -27,6 +27,7 @@ constexpr i64 save_disp(const u32 size, const u32 index) {
 
 struct Frame {
   u32 size = 0;
+  u32 outgoing = 0;
   std::vector<i32> vreg_disp;
   std::vector<u32> vreg_size;
   std::vector<bool> vreg_signed;

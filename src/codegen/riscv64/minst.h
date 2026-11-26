@@ -334,6 +334,8 @@ struct Body {
   std::unordered_map<u32, u32> block_labels;
   u32 label_count = 0;
   bool uses_sret = false;
+  // Stack bytes reserved for arguments past the eight register ones.
+  u32 outgoing = 0;
 };
 
 }  // namespace codegen::riscv64

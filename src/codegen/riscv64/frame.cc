@@ -14,7 +14,10 @@ Frame layout_frame(const Body& body) {
   frame.vreg_size = body.vreg_sizes;
   frame.vreg_disp.resize(frame.vreg_size.size(), 0);
   frame.vreg_signed = body.vreg_signed;
-  u64 cursor = 0;
+  frame.outgoing = body.outgoing;
+  // Arguments past the registers are written at sp+0..outgoing by the
+  // caller, so the bottom of this frame must stay free for them.
+  u64 cursor = frame.outgoing;
   for (u32 at = 0; at < frame.vreg_size.size(); ++at) {
     const u64 size = (std::max<u64>(frame.vreg_size[at], 8) + 7) & ~7ull;
     frame.vreg_disp[at] = static_cast<i32>(cursor);

@@ -457,6 +457,16 @@ base::Result<Body, EmitError> Selector::run() {
       entry = false;
       u32 arg = 0;
       u32 next_float = 0;
+      u32 stack_offset = 0;
+      // Arguments past the register count arrive just above the caller's
+      // frame pointer; the word at [fp] is the previous fp and [fp+8] the
+      // return address, so stack arguments begin at [fp+16].
+      const auto from_stack = [&]() {
+        const Operand slot = Operand{Mem{
+            .base = RegRef{S1}, .disp = static_cast<i32>(16 + stack_offset)}};
+        stack_offset += 8;
+        return slot;
+      };
       if (sret_vreg_ != NO_SRET) {
         emit_move(Operand{S0}, Operand{ARG_REGS[arg++]});
       }
@@ -465,21 +475,34 @@ base::Result<Body, EmitError> Selector::run() {
         const u32 vreg = vreg_of(param.reg, param.type);
         const ir::TypeTag tag = storage_.types()[param.type.idx].tag;
         if (passage_of(param.type) == Passage::ByAddress) {
-          if (arg >= ARG_REG_COUNT) {
-            break;
-          }
           alloca_storage_.insert(vreg);
-          emit_copy(Operand{SlotRef{vreg, 0}},
-                    Operand{Mem{.base = RegRef{ARG_REGS[arg]}, .disp = 0}},
+          const Operand source =
+              arg >= ARG_REG_COUNT
+                  ? from_stack()
+                  : Operand{Mem{.base = RegRef{ARG_REGS[arg]}, .disp = 0}};
+          if (arg < ARG_REG_COUNT) {
+            ++arg;
+          }
+          emit_copy(Operand{SlotRef{vreg, 0}}, source,
                     storage_.layout_of(param.type, width_).size);
-          ++arg;
           continue;
         }
         if (is_float_tag(tag)) {
-          if (next_float >= ARG_FREG_COUNT) {
-            break;
-          }
           const u8 w = tag == ir::TypeTag::F32 ? 4 : 8;
+          if (next_float >= ARG_FREG_COUNT) {
+            // The slot address is [fp+16+stack_offset]; borrow a scratch
+            // GPR to hold that address for the float load.
+            constexpr Reg addr = Reg::X29;
+            const i64 disp = 16 + static_cast<i64>(stack_offset);
+            push(make_inst(MOp::Addi, 8, Operand{addr}, Operand{S1},
+                           Operand{Imm{disp}}));
+            push(make_inst(w == 4 ? MOp::Flw : MOp::Fld, w, Operand{Reg::F0},
+                           Operand{Mem{.base = RegRef{addr}, .disp = 0}}));
+            push(make_inst(w == 4 ? MOp::Fsw : MOp::Fsd, w, Operand{Reg::F0},
+                           Operand{SlotRef{vreg, 0}}));
+            stack_offset += 8;
+            continue;
+          }
           push(make_inst(w == 4 ? MOp::Fsw : MOp::Fsd, w,
                          Operand{ARG_FREGS[next_float]},
                          Operand{SlotRef{vreg, 0}}));
@@ -488,7 +511,14 @@ base::Result<Body, EmitError> Selector::run() {
         }
         if (passage_of(param.type) == Passage::TwoWord) {
           if (arg + 1 >= ARG_REG_COUNT) {
-            break;
+            const Operand low = from_stack();
+            (void)from_stack();
+            push(make_inst(MOp::Ld, 8, Operand{T0}, low));
+            push(make_inst(MOp::Sd, 8, Operand{T0}, Operand{SlotRef{vreg, 0}}));
+            push(make_inst(MOp::Ld, 8, Operand{T0}, from_stack()));
+            push(make_inst(MOp::Sd, 8, Operand{T0}, Operand{SlotRef{vreg, 8}}));
+            alloca_storage_.insert(vreg);
+            continue;
           }
           // The words live in this vreg's own slot; a later projection
           // reads the slot rather than dereferencing the first word.
@@ -499,9 +529,12 @@ base::Result<Body, EmitError> Selector::run() {
                          Operand{SlotRef{vreg, 8}}));
         } else {
           if (arg >= ARG_REG_COUNT) {
-            break;
+            push(make_inst(MOp::Ld, 8, Operand{T0}, from_stack()));
+            push(make_inst(MOp::Sd, 8, Operand{T0}, Operand{SlotRef{vreg, 0}}));
+            alloca_storage_.insert(vreg);
+          } else {
+            emit_move(Operand{VReg{vreg}}, Operand{ARG_REGS[arg++]});
           }
-          emit_move(Operand{VReg{vreg}}, Operand{ARG_REGS[arg++]});
         }
       }
     }
@@ -1754,6 +1787,23 @@ bool Selector::unsupported(const diag::Span span, const std::string_view what) {
 bool Selector::emit_call(const ir::Instruction& instr, const diag::Span span) {
   u32 next_arg = 0;
   u32 next_float = 0;
+  u32 stack_offset = 0;
+  // A value that did not fit a register is written into the frame's
+  // outgoing area; the callee reads it at [fp+16+offset].
+  const auto spill = [&](const Operand& value) {
+    push(make_inst(MOp::Sd, 8, value,
+                   Operand{Mem{.base = RegRef{SP},
+                               .disp = static_cast<i32>(stack_offset)}}));
+    stack_offset += 8;
+    body_.outgoing = std::max(body_.outgoing, stack_offset);
+  };
+  const auto spill_float = [&](const Operand& value, const u8 width) {
+    push(make_inst(width == 4 ? MOp::Fsw : MOp::Fsd, width, value,
+                   Operand{Mem{.base = RegRef{SP},
+                               .disp = static_cast<i32>(stack_offset)}}));
+    stack_offset += 8;
+    body_.outgoing = std::max(body_.outgoing, stack_offset);
+  };
   const bool aggregate_result =
       instr.dst.is_valid() &&
       passage_of(storage_.registers()[instr.dst].type) == Passage::ByAddress;
@@ -1775,11 +1825,19 @@ bool Selector::emit_call(const ir::Instruction& instr, const diag::Span span) {
     const ir::Operand& arg = at(instr, at_index);
     const ir::TypeTag tag = storage_.types()[arg.type.idx].tag;
     if (is_float_tag(tag)) {
-      if (next_float >= ARG_FREG_COUNT) {
-        return unsupported(
-            span, "a call with more than eight floating-point arguments");
-      }
       const u8 w = tag == ir::TypeTag::F32 ? 4 : 8;
+      if (next_float >= ARG_FREG_COUNT) {
+        auto side = arg.is<ir::RegisterIdx>()
+                        ? std::optional<Operand>{Operand{
+                              SlotRef{vreg_of(arg.as_register(), arg.type), 0}}}
+                        : scalar_of(arg);
+        if (!side.has_value()) {
+          return unsupported(span,
+                             "a floating-point call argument with no lowering");
+        }
+        spill_float(*side, w);
+        continue;
+      }
       const u32 vreg =
           arg.is<ir::RegisterIdx>() ? vreg_of(arg.as_register(), arg.type) : 0;
       if (arg.is<ir::RegisterIdx>()) {
@@ -1797,19 +1855,33 @@ bool Selector::emit_call(const ir::Instruction& instr, const diag::Span span) {
       continue;
     }
     if (passage_of(arg.type) == Passage::ByAddress) {
-      if (!arg.is<ir::RegisterIdx>() || next_arg >= ARG_REG_COUNT) {
+      if (!arg.is<ir::RegisterIdx>()) {
         return unsupported(
             span, "a call argument passed by address that is not a register");
       }
-      push(
-          make_inst(MOp::Addr, 8, Operand{ARG_REGS[next_arg++]},
-                    Operand{SlotRef{vreg_of(arg.as_register(), arg.type), 0}}));
+      if (next_arg >= ARG_REG_COUNT) {
+        push(make_inst(
+            MOp::Addr, 8, Operand{T0},
+            Operand{SlotRef{vreg_of(arg.as_register(), arg.type), 0}}));
+        spill(Operand{T0});
+      } else {
+        push(make_inst(
+            MOp::Addr, 8, Operand{ARG_REGS[next_arg++]},
+            Operand{SlotRef{vreg_of(arg.as_register(), arg.type), 0}}));
+      }
       continue;
     }
     if (passage_of(arg.type) == Passage::TwoWord) {
       if (next_arg + 1 >= ARG_REG_COUNT) {
-        return unsupported(span,
-                           "a call with more than eight argument registers");
+        if (arg.is<ir::RegisterIdx>()) {
+          const u32 vreg = vreg_of(arg.as_register(), arg.type);
+          push(make_inst(MOp::Ld, 8, Operand{T0}, Operand{SlotRef{vreg, 0}}));
+          spill(Operand{T0});
+          push(make_inst(MOp::Ld, 8, Operand{T0}, Operand{SlotRef{vreg, 8}}));
+          spill(Operand{T0});
+          continue;
+        }
+        return unsupported(span, "a two-word call argument with no lowering");
       }
       if (arg.is<ir::ImmutableIdx>() && tag == ir::TypeTag::Str) {
         const ir::Immutable& imm = storage_.immutables()[arg.as_immutable()];
@@ -1830,14 +1902,15 @@ bool Selector::emit_call(const ir::Instruction& instr, const diag::Span span) {
       }
       continue;
     }
-    if (next_arg >= ARG_REG_COUNT) {
-      return unsupported(span, "a call with more than eight integer arguments");
-    }
     auto value = scalar_of(arg);
     if (!value.has_value()) {
       return unsupported(span, "a call argument with no lowering");
     }
-    emit_move(Operand{ARG_REGS[next_arg++]}, *value);
+    if (next_arg >= ARG_REG_COUNT) {
+      spill(*value);
+    } else {
+      emit_move(Operand{ARG_REGS[next_arg++]}, *value);
+    }
   }
   const ir::Operand& callee = callee_op;
   std::string symbol;
