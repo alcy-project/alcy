@@ -24,6 +24,13 @@ acces = "acces"
 rela = "rela"
 # C++20 <bit> API std::countr_zero.
 countr = "countr"
+# RISC-V floating-point compare-less-than-or-equal mnemonic and its
+# spelling in printed assembly.
+Fle = "Fle"
+fle = "fle"
+# Floating-point register, the ISA abbreviation used by the direct backends.
+FPR = "FPR"
+fpr = "fpr"
 
 # Intentional misspellings and truncations in editor and CLI test inputs.
 # typos 1.48 scopes words by file-name pattern, not by directory; test
