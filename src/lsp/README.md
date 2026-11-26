@@ -20,6 +20,10 @@ owns no analysis of its own:
   context and the checked artifact it produced. Every semantic feature
   reads its own buffer through a `DocumentAnalysis` view; an import
   reaching a sibling module is resolved against that sibling's source.
+- `will_rename.{h,cc}` answers `workspace/willRenameFiles` with the edits
+  a module rename needs: `use` and qualified paths plus the `[modules]`
+  list of the manifest. `workspace/didRenameFiles` refreshes the analyses
+  after the client has moved the files.
 - `workspace.{h,cc}` maps URIs to paths, finds the nearest `alcy.toml`,
   and fingerprints everything that can invalidate a package's reading.
 - `analysis_cache.{h,cc}` keys those readings by package root and that

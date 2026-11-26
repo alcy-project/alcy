@@ -61,6 +61,8 @@ source_set("lsp") {
     "transport.h",
     "type_hierarchy.cc",
     "type_hierarchy.h",
+    "will_rename.cc",
+    "will_rename.h",
     "workspace.cc",
     "workspace.h",
     "workspace_symbols.cc",

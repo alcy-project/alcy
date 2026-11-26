@@ -500,6 +500,17 @@ def main() -> int:
                 "options": {"tabSize": 2, "insertSpaces": True},
             },
         },
+        {
+            "jsonrpc": "2.0",
+            "id": 38,
+            "method": "workspace/willRenameFiles",
+            "params": {"files": []},
+        },
+        {
+            "jsonrpc": "2.0",
+            "method": "workspace/didRenameFiles",
+            "params": {"files": []},
+        },
         {"jsonrpc": "2.0", "id": 36, "method": "shutdown", "params": None},
         {"jsonrpc": "2.0", "method": "exit"},
     ]
@@ -850,6 +861,14 @@ def main() -> int:
         return fail(f"rangeFormatting returned {len(range_edits)} edits")
     if range_edits[0]["range"]["start"]["line"] != 0:
         return fail("rangeFormatting edited a line outside the request")
+
+    capabilities = by_id.get(1, {}).get("result", {}).get("capabilities", {})
+    file_operations = capabilities.get("workspace", {}).get("fileOperations", {})
+    if not file_operations.get("willRename", {}).get("filters"):
+        return fail("initialize did not advertise willRename file operations")
+
+    if by_id.get(38, {}).get("result", "missing") is not None:
+        return fail("willRenameFiles with no files was not answered with null")
 
     if by_id.get(36, {}).get("result", "missing") is not None:
         return fail("shutdown did not answer with null")

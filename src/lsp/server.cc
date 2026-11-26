@@ -35,6 +35,7 @@
 #include "lsp/symbols.h"
 #include "lsp/transport.h"
 #include "lsp/type_hierarchy.h"
+#include "lsp/will_rename.h"
 #include "lsp/workspace_symbols.h"
 #include "source/source.h"
 #include "text/json.h"
@@ -360,6 +361,16 @@ void Server::handle_request(const text::JsonValue& message) {
     workspace_symbol(*id, *params);
     return;
   }
+  if (method == "workspace/willRenameFiles") {
+    const text::JsonValue* params = field(message, "params");
+    if (params == nullptr || !params->is_object()) {
+      send_error(*id, INVALID_REQUEST,
+                 "workspace/willRenameFiles needs params");
+      return;
+    }
+    will_rename_files(*id, *params);
+    return;
+  }
   if (method == "textDocument/linkedEditingRange") {
     const text::JsonValue* params = field(message, "params");
     if (params == nullptr || !params->is_object()) {
@@ -520,6 +531,8 @@ void Server::handle_notification(const text::JsonValue& message) {
     did_close(*params);
   } else if (method == "workspace/didChangeWatchedFiles") {
     watched_files_changed(*params);
+  } else if (method == "workspace/didRenameFiles") {
+    did_rename_files(*params);
   } else if (method == "$/cancelRequest") {
     if (const text::JsonValue* id = field(*params, "id"); id != nullptr) {
       std::string key = text::to_json(*id);
@@ -638,6 +651,20 @@ void Server::initialize(const text::JsonValue& id,
   diagnostic_provider.set("workspaceDiagnostics",
                           text::JsonValue::make_bool(true));
   capabilities.set("diagnosticProvider", std::move(diagnostic_provider));
+  text::JsonValue pattern = text::JsonValue::make_object();
+  pattern.set("glob", make_string("**/*.al"));
+  text::JsonValue rename_filter = text::JsonValue::make_object();
+  rename_filter.set("scheme", make_string("file"));
+  rename_filter.set("pattern", std::move(pattern));
+  text::JsonValue rename_filters = text::JsonValue::make_array();
+  rename_filters.push(std::move(rename_filter));
+  text::JsonValue will_rename = text::JsonValue::make_object();
+  will_rename.set("filters", std::move(rename_filters));
+  text::JsonValue file_operations = text::JsonValue::make_object();
+  file_operations.set("willRename", std::move(will_rename));
+  text::JsonValue workspace_capability = text::JsonValue::make_object();
+  workspace_capability.set("fileOperations", std::move(file_operations));
+  capabilities.set("workspace", std::move(workspace_capability));
   text::JsonValue experimental = text::JsonValue::make_object();
   experimental.set("alcy/structLayout", text::JsonValue::make_bool(true));
   capabilities.set("experimental", std::move(experimental));
@@ -924,6 +951,17 @@ void Server::workspace_symbol(const text::JsonValue& id,
                               const text::JsonValue& params) {
   send_result(
       id, workspace_symbols(documents_, cache_, string_field(params, "query")));
+}
+
+void Server::will_rename_files(const text::JsonValue& id,
+                               const text::JsonValue& params) {
+  std::optional<text::JsonValue> edit =
+      lsp::will_rename_files(documents_, cache_, params);
+  if (!edit.has_value()) {
+    send_result(id, text::JsonValue{});
+    return;
+  }
+  send_result(id, std::move(*edit));
 }
 
 void Server::implementation(const text::JsonValue& id,
@@ -1408,6 +1446,19 @@ void Server::register_watchers() {
 void Server::watched_files_changed(const text::JsonValue& params) {
   (void)params;
   watched_files_pending_ = true;
+}
+
+void Server::did_rename_files(const text::JsonValue& params) {
+  (void)params;
+  log_message(4, "files renamed; refreshing package analyses");
+  cache_.clear();
+  // Kinds resolved by the old analysis must not be served under a new
+  // version that kept the same result id.
+  tokens_.clear();
+  for (const auto& [uri, document] : documents_.documents()) {
+    (void)uri;
+    publish_diagnostics(document);
+  }
 }
 
 void Server::flush_watched_files() {

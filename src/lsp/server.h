@@ -85,6 +85,7 @@ class Server {
   void did_close(const text::JsonValue& params);
   void register_watchers();
   void watched_files_changed(const text::JsonValue& params);
+  void did_rename_files(const text::JsonValue& params);
   void formatting(const text::JsonValue& id, const text::JsonValue& params);
   void range_formatting(const text::JsonValue& id,
                         const text::JsonValue& params);
@@ -111,6 +112,8 @@ class Server {
   void implementation(const text::JsonValue& id, const text::JsonValue& params);
   void workspace_symbol(const text::JsonValue& id,
                         const text::JsonValue& params);
+  void will_rename_files(const text::JsonValue& id,
+                         const text::JsonValue& params);
   void code_lens(const text::JsonValue& id, const text::JsonValue& params);
   void type_hierarchy_prepare(const text::JsonValue& id,
                               const text::JsonValue& params);
