@@ -186,10 +186,13 @@ Named values (`@function`, immutables) print inline.
 | `CompMakeVariant` | `v = comp_make_variant(tag, fields...)`, an enum assembled at runtime |
 | `CompStrLen` | `v = comp_str_len(s)`, the length of a semantic string |
 
-`CompValue` and `CompStrByte` are semantic-only: the verifier refuses
-them in a resolved body. Synthetic functions used by comp evaluation
-are rolled back before publication, so they never appear in a loaded
-package.
+All `Comp*` opcodes are semantic-only: the verifier refuses them in a
+published body. Synthetic functions used by comp evaluation are rolled
+back before publication, so they never appear in a loaded package.
+
+The opcode names print as `Opcode` followed by its operands, as
+`write_text` emits them; the text above describes each operand, not a
+source-level spelling.
 
 Operands: a register is `vN`, a block `bN`, an immutable is inline, a
 function is its name (or `name#idx`), an external is its name, an

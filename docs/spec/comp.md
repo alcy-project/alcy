@@ -122,10 +122,10 @@ The following are compile-time errors inside comp evaluation:
   comp-known is an error at the head, not inside the cursor library.
 - References in the spliced result, except `str` (references may appear
   during evaluation; the compiler materializes them as constant data).
-- Exhausting the evaluation quota. Every function call and every loop
-  back edge spends one unit of a fixed quota (one million at this
-  stage), so evaluation terminates deterministically; the quota cannot
-  be raised yet.
+- Exhausting the evaluation quota. Every function call, every loop back
+  edge and every materialized `for` element spends one unit of a fixed
+  quota (one million at this stage), so evaluation terminates
+  deterministically; the quota cannot be raised yet.
 - Exceeding the expansion cap. One unrolled `for` body may run at most
   4,096 iterations; this is separate from the global quota and keeps a
   wide expansion from crowding out the rest of compilation. `while`

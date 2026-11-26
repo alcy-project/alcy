@@ -469,9 +469,9 @@ that happens to read them.
    strings.
 
 2. **Parsing** - `parser` consumes the token buffer and emits a typed AST
-   into the module's arena. The published IR is built in lowering;
-   analyzer emits only the temporary synthetic IR used to evaluate comp
-   values.
+   into the module's arena. Analyzer builds the checked type table and
+   emits temporary synthetic IR only to evaluate comp values; the
+   published IR is built in lowering.
 
 3. **Semantic analysis** - `analyzer` resolves names and checks types on
    the attributed AST:

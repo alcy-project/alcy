@@ -19,7 +19,7 @@ is the structural checker both build-time and test-time use.
   checkpoint and rebuilds every index derived from the surviving type
   table, so no intern entry or cache can name a removed type.
 - `verify_storage(storage)` -> `VerificationResult`. Pure structural check.
-  `CompValue` and `CompStrByte` are refused in a resolved body: they carry
+  Every `Comp*` opcode is refused in a published body: they carry
   compile-time values for a synthetic function that is rolled back before
   publication.
 - `VerifiedStorage` - move-only proof that verification ran. The

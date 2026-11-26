@@ -54,9 +54,9 @@ scope with no caller bindings, while `evaluate` carries them.
 
 `const_ir_eval` does the work:
 
-1. `EmitContext` bundles the checked-table callbacks (expression type,
-   path, layout type, comp fn, field and variant resolution) so the
-   recursive emitters do not thread them through every call.
+1. `EmitContext` bundles concrete resolvers bound to an `EvalSite`
+   (module and instantiation), so the recursive emitters can read checked
+   tables without threading callbacks through every call.
 2. `evaluate_const_ir` borrows a `StorageBuilder` and emits one synthetic
    function for the expression. Control flow, aggregates, paths, casts,
    variadics and string intrinsics become IR instructions; strings,
@@ -111,7 +111,7 @@ scope with no caller bindings, while `evaluate` carries them.
 | `resolve` | module tree, imports and its verifier |
 | `types`, `types_*` | type interning, checking and the `CheckedPackage` |
 | `checker` | private checking state, owned by the analyzer's own files |
-| `comp_eval` | shared quota, failure state and callbacks for both callers |
+| `comp_eval` | shared quota, failure state and checked-table resolvers |
 | `const_ir_eval` | synthetic IR emission and rollback for one expression |
 | `fmt` | format-string parsing for `comp_pieces` |
 | `summary` | a library's exported surface spelled into the AST |
