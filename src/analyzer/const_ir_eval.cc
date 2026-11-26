@@ -778,11 +778,10 @@ ir::OperandIdx emit_block(const ast::AstArena& ast,
       if (op.is<ir::ImmutableIdx>()) {
         const ir::TypeTag tag =
             emitter.builder().state().types[binding_type].tag;
-        const u64 bits = emitter.builder()
-                             .state()
-                             .immutables[op.as_immutable()]
-                             .data.u64_value &
-                         comp::mask(tag);
+        const u64 bits =
+            emitter.builder().state().immutables[op.as_immutable()].as_u64_bits(
+                tag) &
+            comp::mask(tag);
         comp::CompVal value;
         value.type = binding_type;
         value.value.tag = tag == ir::TypeTag::I1 ? comp::CompValue::Tag::Bool
@@ -1057,7 +1056,7 @@ ir::OperandIdx emit_block(const ast::AstArena& ast,
           const u64 bits = emitter.builder()
                                .state()
                                .immutables[op.as_immutable()]
-                               .data.u64_value &
+                               .as_u64_bits(tag) &
                            comp::mask(tag);
           comp::CompVal v;
           v.type = local->type;
@@ -1464,10 +1463,10 @@ static bool operand_int(ConstEmitter& emitter, ir::OperandIdx op, u64& out) {
   if (!operand.is<ir::ImmutableIdx>()) {
     return false;
   }
-  out = emitter.builder()
-            .state()
-            .immutables[operand.as_immutable()]
-            .data.u64_value;
+  const ir::TypeTag tag = emitter.builder().state().types[operand.type].tag;
+  out =
+      emitter.builder().state().immutables[operand.as_immutable()].as_u64_bits(
+          tag);
   return true;
 }
 
@@ -1489,10 +1488,10 @@ static bool operand_bool(ConstEmitter& emitter, ir::OperandIdx op, bool& out) {
   if (!operand.is<ir::ImmutableIdx>()) {
     return false;
   }
-  out = emitter.builder()
-            .state()
-            .immutables[operand.as_immutable()]
-            .data.u64_value != 0;
+  const ir::TypeTag tag = emitter.builder().state().types[operand.type].tag;
+  out =
+      emitter.builder().state().immutables[operand.as_immutable()].as_u64_bits(
+          tag) != 0;
   return true;
 }
 
@@ -2945,15 +2944,15 @@ static ir::OperandIdx emit_binary_expr(const ast::AstArena& ast,
     const ir::Operand& lop = emitter.builder().state().operands[lhs.idx];
     const ir::Operand& rop = emitter.builder().state().operands[rhs.idx];
     if (lop.is<ir::ImmutableIdx>() && rop.is<ir::ImmutableIdx>()) {
-      u64 exponent = emitter.builder()
-                         .state()
-                         .immutables[rop.as_immutable()]
-                         .data.u64_value;
+      u64 exponent =
+          emitter.builder().state().immutables[rop.as_immutable()].as_u64_bits(
+              tag) &
+          comp::mask(tag);
       u64 result = 1;
-      u64 base = emitter.builder()
-                     .state()
-                     .immutables[lop.as_immutable()]
-                     .data.u64_value;
+      u64 base =
+          emitter.builder().state().immutables[lop.as_immutable()].as_u64_bits(
+              tag) &
+          comp::mask(tag);
       const u64 mask = comp::mask(tag);
       bool overflow = false;
       while (exponent != 0) {
@@ -3085,14 +3084,15 @@ static ir::OperandIdx emit_tuple_expr(const ast::AstArena& ast,
       if (!operand.is<ir::ImmutableIdx>()) {
         return ir::OperandIdx(base::INVALID_IDX);
       }
+      const ir::TypeTag ftag =
+          emitter.builder().state().types[shape.elements[i]].tag;
       const u64 bits = emitter.builder()
                            .state()
                            .immutables[operand.as_immutable()]
-                           .data.u64_value;
-      field.tag = emitter.builder().state().types[shape.elements[i]].tag ==
-                          ir::TypeTag::I1
-                      ? comp::CompValue::Tag::Bool
-                      : comp::CompValue::Tag::Int;
+                           .as_u64_bits(ftag) &
+                       comp::mask(ftag);
+      field.tag = ftag == ir::TypeTag::I1 ? comp::CompValue::Tag::Bool
+                                          : comp::CompValue::Tag::Int;
       field.int_value = bits;
       field.bool_value = bits != 0;
     }
@@ -3373,10 +3373,11 @@ static ir::OperandIdx emit_index_expr(const ast::AstArena& ast,
       if (!pop.is<ir::ImmutableIdx>()) {
         return ir::OperandIdx(base::INVALID_IDX);
       }
-      const u64 slot = emitter.builder()
-                           .state()
-                           .immutables[pop.as_immutable()]
-                           .data.u64_value;
+      const ir::TypeTag ptag = emitter.builder().state().types[pop.type].tag;
+      const u64 slot =
+          emitter.builder().state().immutables[pop.as_immutable()].as_u64_bits(
+              ptag) &
+          comp::mask(ptag);
       if (slot >= sem.value.slot_types.size()) {
         emitter.set_emit_error(ConstEmitter::EmitError::OutOfBounds);
         return ir::OperandIdx(base::INVALID_IDX);
@@ -3429,10 +3430,11 @@ static ir::OperandIdx emit_index_expr(const ast::AstArena& ast,
           [emitter.builder().state().types[receiver_type].as_array()];
   const ir::Operand& pos_op = emitter.builder().state().operands[position.idx];
   if (pos_op.is<ir::ImmutableIdx>()) {
-    const u64 idx = emitter.builder()
-                        .state()
-                        .immutables[pos_op.as_immutable()]
-                        .data.u64_value;
+    const ir::TypeTag itag = emitter.builder().state().types[pos_op.type].tag;
+    const u64 idx =
+        emitter.builder().state().immutables[pos_op.as_immutable()].as_u64_bits(
+            itag) &
+        comp::mask(itag);
     if (idx >= array_shape.count) {
       emitter.set_emit_error(ConstEmitter::EmitError::OutOfBounds);
       // Keep the IR well-formed so the recorded error can be reported.
@@ -3875,10 +3877,10 @@ static ir::OperandIdx emit_match_expr(const ast::AstArena& ast,
     if (sop.is<ir::ImmutableIdx>()) {
       const ir::TypeTag stag =
           emitter.builder().state().types[scrutinee_type].tag;
-      const u64 bits = emitter.builder()
-                           .state()
-                           .immutables[sop.as_immutable()]
-                           .data.u64_value;
+      const u64 bits =
+          emitter.builder().state().immutables[sop.as_immutable()].as_u64_bits(
+              stag) &
+          comp::mask(stag);
       scratch.type = scrutinee_type;
       if (stag == ir::TypeTag::I1) {
         scratch.value.tag = comp::CompValue::Tag::Bool;
