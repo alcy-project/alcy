@@ -7,26 +7,38 @@
 #include <string_view>
 
 #include "fpag/base/numeric.h"
+#include "tcp/connection.h"
 
 namespace lsp {
 
-// Reads framed messages from one file descriptor and writes them to
-// another. LSP puts a JSON-RPC message in each frame; the transport does
-// not look at the payload.
+// Where a framed message comes from. A socket is one bidirectional
+// stream; the standard streams are two descriptors. The channel does
+// not own the socket: the server run that created it keeps it alive.
+struct Channel {
+  enum class Kind : u8 { Fds, Socket };
+
+  Kind kind = Kind::Fds;
+  i32 input_fd = 0;
+  i32 output_fd = 1;
+  tcp::Connection* socket = nullptr;
+};
+
+// Reads framed messages from one channel and writes them back. LSP puts
+// a JSON-RPC message in each frame; the transport does not look at the
+// payload.
 //
-// Reads are buffered, so a caller may hand the whole input at once. Once
-// a read fails, every later read fails too: a peer that closed or sent a
-// malformed frame has no message to deliver after it.
+// Reads are buffered, so a caller may hand the whole input at once.
+// End of input is distinct from a read failure: the first ends a normal
+// session, the second fails the transport.
 class Transport {
  public:
-  Transport(i32 input_fd, i32 output_fd)
-      : input_fd_(input_fd), output_fd_(output_fd) {}
+  explicit Transport(Channel channel) : channel_(channel) {}
 
   // Reads the next message payload into `out`. False at end of input or
   // on a malformed frame.
   bool read_message(std::string* out);
 
-  // Writes one message with its frame. False if the descriptor stopped
+  // Writes one message with its frame. False if the channel stopped
   // taking bytes.
   bool write_message(std::string_view payload);
 
@@ -40,8 +52,7 @@ class Transport {
   bool read_more();
   bool ensure(usize count);
 
-  i32 input_fd_;
-  i32 output_fd_;
+  Channel channel_;
   std::string buffer_;
   usize start_ = 0;
   bool eof_ = false;

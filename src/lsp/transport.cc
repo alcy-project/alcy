@@ -4,6 +4,7 @@
 #include "lsp/transport.h"
 
 #include <cerrno>
+#include <span>
 #include <string>
 #include <string_view>
 
@@ -17,6 +18,7 @@
 
 #include "fpag/base/numeric.h"
 #include "lsp/frame.h"
+#include "tcp/error.h"
 
 namespace lsp {
 
@@ -24,12 +26,24 @@ namespace {
 
 constexpr usize CHUNK_SIZE = 8192;
 
-isize read_once(i32 fd, void* buffer, usize size) {
+isize read_once(const Channel& channel, void* buffer, usize size) {
+  if (channel.kind == Channel::Kind::Socket) {
+    if (channel.socket == nullptr || !channel.socket->valid()) {
+      return 0;
+    }
+    const base::Result<usize, tcp::Error> count =
+        channel.socket->read(std::span<char>(static_cast<char*>(buffer), size));
+    if (count.is_err()) {
+      return -1;
+    }
+    return static_cast<isize>(count.value());
+  }
 #if BUILD_FLAG(IS_OS_WIN)
-  return static_cast<isize>(_read(fd, buffer, static_cast<u32>(size)));
+  return static_cast<isize>(
+      _read(channel.input_fd, buffer, static_cast<u32>(size)));
 #else
   for (;;) {
-    const isize count = ::read(fd, buffer, size);
+    const isize count = ::read(channel.input_fd, buffer, size);
     if (count < 0 && errno == EINTR) {
       continue;
     }
@@ -38,12 +52,21 @@ isize read_once(i32 fd, void* buffer, usize size) {
 #endif
 }
 
-isize write_once(i32 fd, const void* buffer, usize size) {
+isize write_once(const Channel& channel, const void* buffer, usize size) {
+  if (channel.kind == Channel::Kind::Socket) {
+    if (channel.socket == nullptr || !channel.socket->valid()) {
+      return -1;
+    }
+    const base::Result<void, tcp::Error> written = channel.socket->write(
+        std::string_view(static_cast<const char*>(buffer), size));
+    return written.is_ok() ? static_cast<isize>(size) : -1;
+  }
 #if BUILD_FLAG(IS_OS_WIN)
-  return static_cast<isize>(_write(fd, buffer, static_cast<u32>(size)));
+  return static_cast<isize>(
+      _write(channel.output_fd, buffer, static_cast<u32>(size)));
 #else
   for (;;) {
-    const isize count = ::write(fd, buffer, size);
+    const isize count = ::write(channel.output_fd, buffer, size);
     if (count < 0 && errno == EINTR) {
       continue;
     }
@@ -63,8 +86,13 @@ bool Transport::read_more() {
     start_ = 0;
   }
   char chunk[CHUNK_SIZE];
-  const isize count = read_once(input_fd_, chunk, sizeof(chunk));
-  if (count <= 0) {
+  const isize count = read_once(channel_, chunk, sizeof(chunk));
+  if (count < 0) {
+    eof_ = true;
+    failed_ = true;
+    return false;
+  }
+  if (count == 0) {
     eof_ = true;
     return false;
   }
@@ -82,7 +110,7 @@ bool Transport::ensure(usize count) {
 }
 
 bool Transport::read_message(std::string* out) {
-  if (failed_) {
+  if (failed_ || eof_) {
     return false;
   }
   FrameHeader header;
@@ -96,7 +124,11 @@ bool Transport::read_message(std::string* out) {
       break;
     }
     if (!read_more()) {
-      failed_ = true;
+      // A clean end of input is not a failed transport; a partial frame
+      // left at that point is.
+      if (eof_ && !failed_ && !available().empty()) {
+        failed_ = true;
+      }
       return false;
     }
   }
@@ -116,7 +148,7 @@ bool Transport::write_message(std::string_view payload) {
   usize written = 0;
   while (written < frame.size()) {
     const isize count =
-        write_once(output_fd_, frame.data() + written, frame.size() - written);
+        write_once(channel_, frame.data() + written, frame.size() - written);
     if (count <= 0) {
       failed_ = true;
       return false;

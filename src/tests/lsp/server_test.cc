@@ -49,7 +49,8 @@ std::string serve(const std::string& requests, i32* exit_code) {
         static_cast<isize>(requests.size()));
   ::close(input[1]);
 
-  Transport transport(input[0], output[1]);
+  Transport transport(
+      Channel{Channel::Kind::Fds, input[0], output[1], nullptr});
   Server server(transport);
   *exit_code = server.run();
 
