@@ -2526,12 +2526,15 @@ bool Checker::const_int_value(const CheckedModule::StaticInfo& info,
   if (!ensure_const_checked(info)) {
     return false;
   }
-  comp::CompVal value;
   CompEval eval(
       CompInputs{tree, interner, modules, {}, type_origins_, fn_instances}, ast,
       builder, width);
-  if (!eval.evaluate_item(info.module, info.init, cur_inst, value) ||
-      value.value.tag != comp::CompValue::Tag::Int) {
+  auto evaluated = eval.evaluate_item(info.module, info.init, cur_inst);
+  if (evaluated.is_err()) {
+    return wrong();
+  }
+  comp::CompVal value = std::move(evaluated).unwrap();
+  if (value.value.tag != comp::CompValue::Tag::Int) {
     return wrong();
   }
   // A length is a count in the declared type's range, so a literal

@@ -1404,6 +1404,7 @@ class Lowerer {
     // Reports the evaluator's last failure through the lowering's own
     // diagnostics.
     void report_failure();
+    void report_failure(const analyzer::CompEval::EvalFailure& err);
 
     Lowerer& owner_;
   };

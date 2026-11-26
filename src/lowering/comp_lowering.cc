@@ -179,21 +179,23 @@ Val Lowerer::Comp::materialize(const CompVal& value, diag::Span span) {
 // instantiation as its seed and the persistent comp bindings as the
 // outer scope; a failure is reported where the lowering reports.
 bool Lowerer::Comp::evaluate(u32 mod, ast::ExprIdx expr, CompVal& out) {
-  owner_.comp_.clear_failure();
-  if (!owner_.comp_.evaluate(mod, expr, owner_.cur_inst_, &owner_.comp_scope_,
-                             out)) {
-    report_failure();
+  auto result =
+      owner_.comp_.evaluate(mod, expr, owner_.cur_inst_, &owner_.comp_scope_);
+  if (result.is_err()) {
+    report_failure(std::move(result).unwrap_err());
     return false;
   }
+  out = std::move(result).unwrap();
   return true;
 }
 
 bool Lowerer::Comp::evaluate_item(u32 mod, ast::ExprIdx init, CompVal& out) {
-  owner_.comp_.clear_failure();
-  if (!owner_.comp_.evaluate_item(mod, init, owner_.cur_inst_, out)) {
-    report_failure();
+  auto result = owner_.comp_.evaluate_item(mod, init, owner_.cur_inst_);
+  if (result.is_err()) {
+    report_failure(std::move(result).unwrap_err());
     return false;
   }
+  out = std::move(result).unwrap();
   return true;
 }
 
@@ -210,31 +212,36 @@ bool Lowerer::Comp::bind_pattern(u32 mod,
   return true;
 }
 
-void Lowerer::Comp::report_failure() {
-  switch (owner_.comp_.failure_kind()) {
+void Lowerer::Comp::report_failure(const analyzer::CompEval::EvalFailure& err) {
+  switch (err.kind) {
     case analyzer::CompEval::Failure::Internal:
-      owner_.internal(owner_.comp_.failure_span(), owner_.comp_.failure());
+      owner_.internal(err.span, err.what);
       return;
     case analyzer::CompEval::Failure::Overflow:
-      owner_.comp_overflow(owner_.comp_.failure_span());
+      owner_.comp_overflow(err.span);
       return;
     case analyzer::CompEval::Failure::DivZero:
-      owner_.comp_div_zero(owner_.comp_.failure_span());
+      owner_.comp_div_zero(err.span);
       return;
     case analyzer::CompEval::Failure::OutOfBounds:
-      owner_.comp_oob(owner_.comp_.failure_span());
+      owner_.comp_oob(err.span);
       return;
     case analyzer::CompEval::Failure::Budget:
-      owner_.comp_budget(owner_.comp_.failure_span());
+      owner_.comp_budget(err.span);
       return;
     case analyzer::CompEval::Failure::ExpansionCap:
-      owner_.comp_expansion_cap(owner_.comp_.failure_span());
+      owner_.comp_expansion_cap(err.span);
       return;
     case analyzer::CompEval::Failure::Program:
     case analyzer::CompEval::Failure::None: break;
   }
-  owner_.comp_not_evaluable(owner_.comp_.failure_span(),
-                            owner_.comp_.failure());
+  owner_.comp_not_evaluable(err.span, err.what);
+}
+
+void Lowerer::Comp::report_failure() {
+  report_failure(analyzer::CompEval::EvalFailure{
+      owner_.comp_.failure_kind(), owner_.comp_.failure_span(),
+      std::string(owner_.comp_.failure())});
 }
 
 }  // namespace lowering

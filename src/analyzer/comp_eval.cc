@@ -252,31 +252,39 @@ u32 CompEval::callee_inst(const CheckedModule::CallTarget* target) const {
   return inst == PARAM_INST ? NO_INST : inst;
 }
 
-bool CompEval::evaluate(
+CompEval::EvalResult CompEval::evaluate(
     u32 module,
     ast::ExprIdx expr,
     u32 inst,
-    std::vector<std::pair<std::string_view, CompVal>>* outer,
-    CompVal& out) {
+    std::vector<std::pair<std::string_view, CompVal>>* outer) {
   CompScope scope;
   scope.outer = outer;
   scope.frames.emplace_back();
   quota_ = COMP_BRANCH_QUOTA;
   call_depth_ = 0;
   inst_ = inst;
-  return try_ir_eval(module, expr, scope, out);
+  CompVal value;
+  if (!try_ir_eval(module, expr, scope, value)) {
+    return base::make_err(
+        EvalFailure{failure_, fail_span_, std::move(fail_what_)});
+  }
+  return base::make_ok(std::move(value));
 }
 
-bool CompEval::evaluate_item(u32 module,
-                             ast::ExprIdx init,
-                             u32 inst,
-                             CompVal& out) {
+CompEval::EvalResult CompEval::evaluate_item(u32 module,
+                                             ast::ExprIdx init,
+                                             u32 inst) {
   quota_ = COMP_BRANCH_QUOTA;
   call_depth_ = 0;
   inst_ = inst;
   CompScope scope;
   scope.frames.emplace_back();
-  return try_ir_eval(module, init, scope, out);
+  CompVal value;
+  if (!try_ir_eval(module, init, scope, value)) {
+    return base::make_err(
+        EvalFailure{failure_, fail_span_, std::move(fail_what_)});
+  }
+  return base::make_ok(std::move(value));
 }
 
 ir::TypeIdx CompEval::expr_type_in(u32 mod, ast::ExprIdx expr) {

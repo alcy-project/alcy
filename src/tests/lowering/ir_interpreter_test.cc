@@ -73,7 +73,11 @@ std::optional<comp::CompVal> ast_value(Fixture& f,
                              checked.generic_insts, checked.type_origins,
                              checked.fn_insts},
         f.ast, builder, ir::PointerWidth::W64);
-    ok = evaluator.evaluate_item(0, init, analyzer::NO_INST, value);
+    auto evaluated = evaluator.evaluate_item(0, init, analyzer::NO_INST);
+    ok = evaluated.is_ok();
+    if (ok) {
+      value = std::move(evaluated).unwrap();
+    }
   }
   base::Result<ir::VerifiedStorage, ir::VerificationError> rebuilt =
       std::move(builder).build();

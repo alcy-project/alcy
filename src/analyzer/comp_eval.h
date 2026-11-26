@@ -17,6 +17,7 @@
 #include "comp/ir_interpreter.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
+#include "fpag/base/result.h"
 #include "ir/common.h"
 #include "ir/storage_builder.h"
 #include "ir/symbol_table.h"
@@ -85,19 +86,34 @@ class CompEval {
            ir::StorageBuilder& builder,
            ir::PointerWidth width);
 
+  enum class Failure : u8 {
+    None,
+    Program,
+    Internal,
+    Overflow,
+    DivZero,
+    OutOfBounds,
+    Budget,
+    ExpansionCap,
+  };
+
+  struct EvalFailure {
+    Failure kind;
+    diag::Span span;
+    std::string what;
+  };
+  using EvalResult = base::Result<comp::CompVal, EvalFailure>;
+
   // One expression at `module`, checked under `inst`. `outer` holds
   // the persistent comp bindings (comp parameters) and may be null.
-  bool evaluate(u32 module,
-                ast::ExprIdx expr,
-                u32 inst,
-                std::vector<std::pair<std::string_view, comp::CompVal>>* outer,
-                comp::CompVal& out);
+  EvalResult evaluate(
+      u32 module,
+      ast::ExprIdx expr,
+      u32 inst,
+      std::vector<std::pair<std::string_view, comp::CompVal>>* outer);
   // One const item initializer, in item scope with the quota reset;
   // no caller bindings are visible.
-  bool evaluate_item(u32 module,
-                     ast::ExprIdx init,
-                     u32 inst,
-                     comp::CompVal& out);
+  EvalResult evaluate_item(u32 module, ast::ExprIdx init, u32 inst);
 
   // Checked-table resolution used by the synthetic IR emitter. Every
   // method reads `site` explicitly, so the emitter does not depend on
@@ -115,17 +131,6 @@ class CompEval {
   EmitContext emit_context_for(EvalSite site, comp::CompScope& scope);
 
   ir::SymbolTable& strings() const { return inputs_.strings; }
-
-  enum class Failure : u8 {
-    None,
-    Program,
-    Internal,
-    Overflow,
-    DivZero,
-    OutOfBounds,
-    Budget,
-    ExpansionCap,
-  };
 
   bool failed() const { return failure_ != Failure::None; }
   Failure failure_kind() const { return failure_; }
