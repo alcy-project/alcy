@@ -470,6 +470,51 @@ void emit_bytes(std::string& out, const std::vector<u8>& bytes) {
   }
 }
 
+// Emit a span of section bytes. Slots the object relocated are written
+// as symbolic expressions so a printed source assembles to the same
+// bytes as the object; the other bytes are emitted literally.
+void emit_bytes_with_relocations(std::string& out,
+                                 const object::Object& object,
+                                 const u32 section_index,
+                                 const usize begin,
+                                 const usize end) {
+  std::vector<const object::Relocation*> relocs;
+  for (const object::Relocation& reloc : object.relocations) {
+    if (reloc.section == section_index && reloc.offset >= begin &&
+        reloc.offset < end) {
+      relocs.push_back(&reloc);
+    }
+  }
+  std::sort(relocs.begin(), relocs.end(),
+            [](const object::Relocation* a, const object::Relocation* b) {
+              return a->offset < b->offset;
+            });
+  const auto& bytes = object.sections[section_index].bytes;
+  usize at = begin;
+  for (const object::Relocation* reloc : relocs) {
+    if (reloc->offset > at) {
+      emit_bytes(out, std::vector<u8>(bytes.begin() + at,
+                                      bytes.begin() + reloc->offset));
+    }
+    if (reloc->kind == object::RelocKind::Abs64) {
+      out += "\t.quad " + reloc->symbol;
+      if (reloc->addend > 0) {
+        out += " + " + std::to_string(reloc->addend);
+      } else if (reloc->addend < 0) {
+        out += " - " + std::to_string(-reloc->addend);
+      }
+      out += '\n';
+    } else {
+      emit_bytes(out, std::vector<u8>(bytes.begin() + reloc->offset,
+                                      bytes.begin() + reloc->offset + 8));
+    }
+    at = reloc->offset + 8;
+  }
+  if (at < end) {
+    emit_bytes(out, std::vector<u8>(bytes.begin() + at, bytes.begin() + end));
+  }
+}
+
 void emit_data_section(std::string& out,
                        const object::Object& object,
                        const u32 section_index) {
@@ -492,9 +537,7 @@ void emit_data_section(std::string& out,
     while (at < symbol->offset && at < section.bytes.size()) {
       const usize end =
           std::min(static_cast<usize>(symbol->offset), section.bytes.size());
-      std::vector<u8> gap(section.bytes.begin() + at,
-                          section.bytes.begin() + end);
-      emit_bytes(out, gap);
+      emit_bytes_with_relocations(out, object, section_index, at, end);
       at = end;
     }
     if (symbol->bind == object::SymbolBind::Global) {
@@ -503,8 +546,8 @@ void emit_data_section(std::string& out,
     out += "\t.type " + symbol->name + ",@object\n";
     out += symbol->name + ":\n";
   }
-  std::vector<u8> rest(section.bytes.begin() + at, section.bytes.end());
-  emit_bytes(out, rest);
+  emit_bytes_with_relocations(out, object, section_index, at,
+                              section.bytes.size());
 }
 
 }  // namespace
@@ -599,8 +642,7 @@ std::string print_assembly(const object::Object& object,
       ++body_at;
       continue;
     }
-    std::vector<u8> chunk(text_bytes.begin() + at, text_bytes.begin() + next);
-    emit_bytes(out, chunk);
+    emit_bytes_with_relocations(out, object, 0, at, next);
     at = next;
   }
 
