@@ -8,6 +8,7 @@
 #include <optional>
 #include <span>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -233,6 +234,9 @@ class Interpreter {
   // The run's objects in one arena. An address stays valid for the whole
   // run, so a reference passed down a call reads the caller's object.
   std::vector<u8> memory_;
+  // Values with no byte layout (strings, ZST fields) keep their CompVal
+  // here, indexed by place and type, so a Store/Load round trip is lossless.
+  std::unordered_map<u64, std::unordered_map<u32, CompVal>> semantic_memory_;
   std::optional<IrRunError> error_;
   bool jumped_ = false;
   ir::BlockIdx jump_target_ = ir::BlockIdx(base::INVALID_IDX);
@@ -1765,6 +1769,20 @@ bool Interpreter::write_value(ir::TypeIdx type,
                               const CompValue& value,
                               ir::InstructionIdx instr) {
   const TypeTag tag = tag_of(type);
+  if (tag == TypeTag::Void) {
+    return true;
+  }
+  if (tag == TypeTag::Str) {
+    if (value.tag != CompValue::Tag::Str) {
+      return fail(IrRunError::Kind::Internal, instr,
+                  "string store of a non-string value");
+    }
+    CompVal stored;
+    stored.type = type;
+    stored.value = value;
+    semantic_memory_[address][type.idx] = std::move(stored);
+    return true;
+  }
   if (ir::is_integer_type(tag)) {
     const u64 bits = value.tag == CompValue::Tag::Bool
                          ? (value.bool_value ? 1u : 0u)
@@ -1857,6 +1875,27 @@ bool Interpreter::write_value(ir::TypeIdx type,
 
 bool Interpreter::read_value(ir::TypeIdx type, u64 address, CompValue& out) {
   const TypeTag tag = tag_of(type);
+  if (tag == TypeTag::Void) {
+    out = CompValue{};
+    out.tag = CompValue::Tag::Void;
+    return true;
+  }
+  if (tag == TypeTag::Str) {
+    const auto found = semantic_memory_.find(address);
+    if (found == semantic_memory_.end()) {
+      return fail(IrRunError::Kind::Internal,
+                  ir::InstructionIdx(base::INVALID_IDX),
+                  "string load without a stored semantic value");
+    }
+    const auto by_type = found->second.find(type.idx);
+    if (by_type == found->second.end()) {
+      return fail(IrRunError::Kind::Internal,
+                  ir::InstructionIdx(base::INVALID_IDX),
+                  "string load without a stored semantic value");
+    }
+    out = by_type->second.value;
+    return true;
+  }
   if (ir::is_integer_type(tag)) {
     u64 bits = 0;
     if (!read_bytes(address, layout_of(type).size,

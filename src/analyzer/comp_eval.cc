@@ -257,6 +257,7 @@ CompEval::EvalResult CompEval::evaluate(
     ast::ExprIdx expr,
     u32 inst,
     std::vector<std::pair<std::string_view, CompVal>>* outer) {
+  clear_failure();
   CompScope scope;
   scope.outer = outer;
   scope.frames.emplace_back();
@@ -274,6 +275,7 @@ CompEval::EvalResult CompEval::evaluate(
 CompEval::EvalResult CompEval::evaluate_item(u32 module,
                                              ast::ExprIdx init,
                                              u32 inst) {
+  clear_failure();
   quota_ = COMP_BRANCH_QUOTA;
   call_depth_ = 0;
   inst_ = inst;
