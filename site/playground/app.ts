@@ -70,12 +70,24 @@ function initActionsMenu(): void {
   });
 }
 
+// The run shortcut belongs to the page, not to the editor's focus.
+function initRunShortcut(): void {
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && (event.ctrlKey || event.metaKey) &&
+        !event.defaultPrevented) {
+      event.preventDefault();
+      void runtime.run();
+    }
+  });
+}
+
 function init(): void {
   initSettingsMenu();
   initThemeToggle(elements.theme);
   initActionsMenu();
   registerAssetWorker();
   initSearch();
+  initRunShortcut();
   enableLinkPrefetch();
   splitter.initSplitter();
   tabs.initTabs();
@@ -85,7 +97,6 @@ function init(): void {
 
   editor.initEditor({
     onInput,
-    onRun: () => void runtime.run(),
     onHighlightError: status.setStatus,
   });
 

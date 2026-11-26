@@ -20,14 +20,12 @@ const GUTTER_MIN_WIDTH_CH = 4;
 
 export interface EditorHandlers {
   onInput?: () => void;
-  onRun?: () => void;
   onHighlightError?: (key: MessageKey, params?: MessageParams) => void;
 }
 
 // Wired by `initEditor` so this module stays a leaf: errors it cannot fix
 // are reported through the page's status line by the caller.
 let onInput: () => void = () => {};
-let onRun: () => void = () => {};
 let onHighlightError: (key: MessageKey, params?: MessageParams) => void = () => {};
 
 export function normalizedSource(): string {
@@ -226,7 +224,6 @@ export function replaceBuffer(text: string): void {
 
 export function initEditor(handlers: EditorHandlers): void {
   onInput = handlers.onInput ?? onInput;
-  onRun = handlers.onRun ?? onRun;
   onHighlightError = handlers.onHighlightError ?? onHighlightError;
 
   elements.source.value = FALLBACK_SOURCE;
@@ -252,9 +249,6 @@ export function initEditor(handlers: EditorHandlers): void {
       event.preventDefault();
       insertAtCursor("  ");
       noteEdit();
-    } else if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
-      event.preventDefault();
-      onRun();
     }
   });
 
