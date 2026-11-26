@@ -2120,7 +2120,8 @@ ir::OperandIdx emit_comp_for(const ast::AstArena& ast,
 
   // A range loop is a real IR loop: the index travels in a block param,
   // the back edge spends the shared quota, and break/continue keep their
-  // ordinary targets. The expansion cap is checked once on the known count.
+  // ordinary targets. The cap is enforced while materializing the range
+  // and again after collection.
   const ir::TypeIdx index_ty = elements[0].type;
   const ir::TypeTag index_tag = emitter.builder().state().types[index_ty].tag;
   const u64 first = elements[0].value.int_value & comp::mask(index_tag);
@@ -2476,8 +2477,10 @@ static ir::OperandIdx emit_comp_inline(const ast::AstArena& ast,
   emitter.set_block_params(callee_return,
                            emitter.block_param(info.ret, callee_result));
   emitter.push_return_target(callee_return, callee_result);
+  const usize saved_bindings = emitter.value_bindings_size();
   const ir::OperandIdx body_value =
       emit_block(ast, body, info.ret, emitter, callee_ctx, &callee_env);
+  emitter.restore_value_bindings(saved_bindings);
   emitter.pop_return_target();
   if (!body_value.is_valid()) {
     emitter.set_cur(callee_return);
@@ -3392,16 +3395,11 @@ static ir::OperandIdx emit_field_expr(const ast::AstArena& ast,
   if (ast.exprs[field.receiver].kind == ast::ExprKind::Path ||
       ast.exprs[field.receiver].kind == ast::ExprKind::Field ||
       ast.exprs[field.receiver].kind == ast::ExprKind::Index) {
-    const auto& segs =
-        ast.paths[ast.exprs[field.receiver].payload.get<ast::ExprPath>().idx]
-            .segments;
-    if (segs.size() == 1) {
-      base = emit_place_address(ast, field.receiver, emitter, ctx, params);
-      base_is_address = base.is_valid();
-      if (!base.is_valid()) {
-        base =
-            emit_expr(ast, field.receiver, receiver_type, emitter, ctx, params);
-      }
+    base = emit_place_address(ast, field.receiver, emitter, ctx, params);
+    base_is_address = base.is_valid();
+    if (!base.is_valid()) {
+      base =
+          emit_expr(ast, field.receiver, receiver_type, emitter, ctx, params);
     }
   }
   if (!base.is_valid()) {

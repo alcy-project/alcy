@@ -3,11 +3,13 @@
 
 #pragma once
 
+#include <limits>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
+#include "debug/dcheck.h"
 #include "fpag/base/idx.h"
 #include "fpag/base/numeric.h"
 #include "fpag/str/string_pool_id.h"
@@ -47,7 +49,7 @@ struct CompValue {
   str::StringPoolId str_id = str::INVALID_STRING_POOL_ID;
   // A slice of a pooled string is a view: its offsets are relative to
   // the pooled bytes, so no copy or new pool entry is needed.
-  constexpr static u32 WHOLE_STRING = 0xFFFFFFFFu;
+  constexpr static u32 WHOLE_STRING = std::numeric_limits<u32>::max();
   u32 str_offset = 0;
   u32 str_length = WHOLE_STRING;
   std::string owned_str;
@@ -64,6 +66,9 @@ inline std::string_view string_bytes(const CompValue& value,
     return value.owned_str;
   }
   const std::string_view all = strings.get(value.str_id);
+  DCHECK(value.str_offset <= all.size());
+  DCHECK(value.str_length == CompValue::WHOLE_STRING ||
+         value.str_length <= all.size() - value.str_offset);
   const usize from =
       value.str_offset < all.size() ? value.str_offset : all.size();
   const usize rest = all.size() - from;

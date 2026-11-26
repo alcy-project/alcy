@@ -37,8 +37,13 @@ Val Lowerer::Comp::materialize(const CompVal& value, diag::Span span) {
                  false};
     }
     case CompValue::Tag::Str: {
+      const bool pooled = value.value.str_id != str::INVALID_STRING_POOL_ID &&
+                          value.value.str_offset == 0 &&
+                          value.value.str_length == CompValue::WHOLE_STRING;
       const str::StringPoolId id =
-          owner_.intern_copied(comp::string_bytes(value.value, owner_.strings));
+          pooled ? value.value.str_id
+                 : owner_.intern_copied(
+                       comp::string_bytes(value.value, owner_.strings));
       if (id == str::INVALID_STRING_POOL_ID) {
         return Val{owner_.size_one, owner_.error_type(), false, false};
       }

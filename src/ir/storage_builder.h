@@ -236,13 +236,34 @@ class StorageBuilder {
     usize synthetic = 0;
     usize types = 0;
     usize ref_types = 0;
+    usize struct_types = 0;
+    usize array_types = 0;
+    usize slice_types = 0;
+    usize enum_types = 0;
+    usize enum_variant_types = 0;
+    usize tuple_types = 0;
+    usize func_types = 0;
+    usize const_types = 0;
   };
   Checkpoint checkpoint() const {
-    return {state_.immutables.size(), state_.operands.size(),
-            state_.instrs.size(),     state_.registers.size(),
-            state_.blocks.size(),     state_.block_params.size(),
-            state_.functions.size(),  state_.synthetic_functions.size(),
-            state_.types.size(),      state_.ref_types.size()};
+    return {state_.immutables.size(),
+            state_.operands.size(),
+            state_.instrs.size(),
+            state_.registers.size(),
+            state_.blocks.size(),
+            state_.block_params.size(),
+            state_.functions.size(),
+            state_.synthetic_functions.size(),
+            state_.types.size(),
+            state_.ref_types.size(),
+            state_.struct_types.size(),
+            state_.array_types.size(),
+            state_.slice_types.size(),
+            state_.enum_types.size(),
+            state_.enum_variant_types.size(),
+            state_.tuple_types.size(),
+            state_.func_types.size(),
+            state_.const_types.size()};
   }
   void rollback(Checkpoint cp) {
     auto pop_to = [](auto& vec, usize size) {
@@ -260,11 +281,21 @@ class StorageBuilder {
     pop_to(state_.synthetic_functions, cp.synthetic);
     pop_to(state_.types, cp.types);
     pop_to(state_.ref_types, cp.ref_types);
-    // Every other table is derived from the type table. Rebuild the
-    // indexes from what survived rather than trying to pop them: a
-    // shape reserved before the checkpoint can have gained payload
-    // rows after it, and an intern entry can name a live type by key.
-    index_interned();
+    pop_to(state_.struct_types, cp.struct_types);
+    pop_to(state_.array_types, cp.array_types);
+    pop_to(state_.slice_types, cp.slice_types);
+    pop_to(state_.enum_types, cp.enum_types);
+    pop_to(state_.enum_variant_types, cp.enum_variant_types);
+    pop_to(state_.tuple_types, cp.tuple_types);
+    pop_to(state_.func_types, cp.func_types);
+    pop_to(state_.const_types, cp.const_types);
+    // Derived indexes are keyed by shape, not by insertion order. Drop
+    // only the entries that name a type the rollback removed; a full
+    // rebuild would make one comp expression scan the whole package.
+    // Layout hints are left alone: a struct reserved before the
+    // checkpoint can gain hints after it, and its live type still names
+    // those rows.
+    prune_interned(static_cast<u32>(cp.types));
   }
   // Sizes the tables a caller knows the population of before it fills
   // them. A table grown by doubling halves its own headroom: every
@@ -459,6 +490,7 @@ class StorageBuilder {
   // later request interns to. Rollback calls this after dropping the
   // speculative types; import calls it after adopting a type table.
   void index_interned();
+  void prune_interned(u32 keep_before);
 
   StorageState state_;
 

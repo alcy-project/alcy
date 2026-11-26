@@ -1089,6 +1089,50 @@ std::unordered_map<u32, TypeIdx>* StorageBuilder::pointer_table(TypeTag tag) {
   return nullptr;
 }
 
+void StorageBuilder::prune_interned(u32 keep_before) {
+  const auto stale = [keep_before](TypeIdx idx) {
+    return idx.idx >= keep_before;
+  };
+  const auto prune_map = [&stale](auto& map) {
+    for (auto it = map.begin(); it != map.end();) {
+      if (stale(it->second)) {
+        it = map.erase(it);
+      } else {
+        ++it;
+      }
+    }
+  };
+  prune_map(ref_by_pointee_);
+  prune_map(mut_ref_by_pointee_);
+  prune_map(raw_ptr_by_pointee_);
+  prune_map(raw_mut_ptr_by_pointee_);
+  prune_map(param_by_index_);
+  prune_map(slice_by_element_);
+  prune_map(const_by_value_);
+  for (auto it = tuple_by_key_.begin(); it != tuple_by_key_.end();) {
+    auto& candidates = it->second;
+    for (auto candidate = candidates.begin(); candidate != candidates.end();) {
+      if (stale(*candidate)) {
+        candidate = candidates.erase(candidate);
+      } else {
+        ++candidate;
+      }
+    }
+    if (candidates.empty()) {
+      it = tuple_by_key_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+  if (never_.is_valid() && stale(never_)) {
+    never_ = TypeIdx::invalid();
+  }
+  if (error_.is_valid() && stale(error_)) {
+    error_ = TypeIdx::invalid();
+  }
+  state_.names_param_memo.resize(keep_before);
+}
+
 void StorageBuilder::index_interned() {
   ref_by_pointee_.clear();
   mut_ref_by_pointee_.clear();

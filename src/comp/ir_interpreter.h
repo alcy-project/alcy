@@ -122,6 +122,8 @@ inline constexpr std::string_view UNSUPPORTED_REFUSALS[] = {
     "reference argument in comp evaluation",
     "reference result in comp evaluation",
     "slice not on a scalar boundary",
+    "string store in comp evaluation",
+    "zero-sized value in comp evaluation",
     "switch in comp evaluation",
     "type query in comp evaluation",
 };

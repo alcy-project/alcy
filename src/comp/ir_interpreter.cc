@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "comp/comp_value.h"
+#include "debug/check.h"
 #include "debug/dcheck.h"
 #include "fpag/base/idx.h"
 #include "fpag/base/numeric.h"
@@ -89,11 +90,11 @@ class Interpreter {
     u32 base = 0;
     std::vector<Slot> regs;
     Slot& at(u32 idx) {
-      DCHECK(idx >= base && idx - base < regs.size());
+      CHECK(idx >= base && idx - base < regs.size());
       return regs[idx - base];
     }
     const Slot& at(u32 idx) const {
-      DCHECK(idx >= base && idx - base < regs.size());
+      CHECK(idx >= base && idx - base < regs.size());
       return regs[idx - base];
     }
   };
@@ -1132,10 +1133,23 @@ bool Interpreter::execute_instruction(ir::InstructionIdx instr,
         } else {
           const ir::TypeIdx type = operand_at(instr, i).type;
           const TypeTag tag = tag_of(type);
+          u64 bits = field_slot.bits;
+          if (field_slot.kind == Slot::Kind::Address) {
+            Slot loaded;
+            if (!read(type, field_slot.address, instr, loaded) ||
+                loaded.kind != Slot::Kind::Scalar) {
+              return fail(IrRunError::Kind::Internal, instr,
+                          "variant field is not a scalar");
+            }
+            bits = loaded.bits;
+          } else if (field_slot.kind != Slot::Kind::Scalar) {
+            return fail(IrRunError::Kind::Internal, instr,
+                        "variant field of an unsupported slot kind");
+          }
           field.tag =
               tag == TypeTag::I1 ? CompValue::Tag::Bool : CompValue::Tag::Int;
-          field.int_value = field_slot.bits & int_mask(tag);
-          field.bool_value = field_slot.bits != 0;
+          field.int_value = bits & int_mask(tag);
+          field.bool_value = bits != 0;
         }
         made.value.fields.push_back(std::move(field));
       }
@@ -1760,8 +1774,15 @@ bool Interpreter::write_value(ir::TypeIdx type,
   }
   if (tag == TypeTag::Struct || tag == TypeTag::Tuple) {
     ir::TypeIdxRange fields;
+    const ir::TypeLayoutHints* hints = nullptr;
+    u32 hint_count = 0;
     if (tag == TypeTag::Struct) {
-      fields = storage_.struct_types[storage_.types[type].as_struct()].fields;
+      const ir::StructType& shape =
+          storage_.struct_types[storage_.types[type].as_struct()];
+      fields = shape.fields;
+      const auto [found, count] = ir::field_hints_of(storage_, shape);
+      hints = found;
+      hint_count = count;
     } else {
       fields = storage_.tuple_types[storage_.types[type].as_tuple()].elements;
     }
@@ -1770,7 +1791,8 @@ bool Interpreter::write_value(ir::TypeIdx type,
                   "aggregate store arity mismatch");
     }
     for (u32 i = 0; i < fields.size(); ++i) {
-      const u64 at = address + ir::field_offset(storage_, fields, i, width_);
+      const u64 at = address + ir::field_offset(storage_, fields, i, width_,
+                                                hints, hint_count);
       if (!write_value(fields[i], at, value.fields[i], instr)) {
         return false;
       }

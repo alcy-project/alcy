@@ -119,7 +119,7 @@ constexpr OperandArity operand_arity(const Opcode op) {
     case O::CompVariantTag: return {1, 1, true};
     case O::CompField: return {2, 2, true};
     case O::CompArrayIndex: return {2, 2, true};
-    case O::CompMakeVariant: return {1, 0xFFFFFFFFu, true};
+    case O::CompMakeVariant: return {1, ANY_OPERANDS, true};
     case O::CompStrLen: return {1, 1, true};
   }
   return {};
@@ -450,7 +450,7 @@ VerificationResult verify_storage(const Storage& storage) {
     }
   }
 
-  // Bodies whose semantic markers the specialization pass still resolves.
+  // Bodies whose parametric types the specialization pass still resolves.
   std::vector<bool> unresolved(storage.functions().size(), false);
   for (const FunctionIdx fidx : storage.parametric_functions()) {
     if (fidx.idx >= storage.functions().size()) {
