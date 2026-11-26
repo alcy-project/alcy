@@ -1,4 +1,4 @@
-// `loop` stays on the evaluation quota, not the expansion cap.
+// A loop body past the old unroll cap is not refused by that cap.
 comp fn count(n: i32) -> i32 {
   mut i := 0
   loop {

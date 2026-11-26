@@ -8,6 +8,7 @@
 
 #include "doctest/doctest.h"
 #include "ir/common.h"
+#include "ir/seq_builder.h"
 #include "ir/type.h"
 
 namespace ir {
@@ -65,32 +66,40 @@ TEST_CASE("Rollback removes the interned reference types it added") {
 TEST_CASE("Rollback rebuilds every index derived from the type table") {
   StorageBuilder builder;
   const TypeIdx i32 = builder.primitive(TypeTag::I32);
+  ir::TypeSeq elements;
+  elements.push(i32);
   const TypeIdx live_ref = builder.reference_type(i32, false);
+  const TypeIdx live_mut = builder.reference_type(i32, true);
+  const TypeIdx live_raw = builder.raw_pointer_type(i32, false);
+  const TypeIdx live_raw_mut = builder.raw_pointer_type(i32, true);
+  const TypeIdx live_param = builder.param_type(7);
+  const TypeIdx live_tuple = builder.tuple_type(elements.finish());
+  const TypeIdx live_const = builder.const_type(42);
+  const TypeIdx live_error = builder.error_type();
   const StorageBuilder::Checkpoint cp = builder.checkpoint();
 
   // A duplicate node shares the live reference's payload: dropping the
   // speculative nodes must not drop the entry that names `live_ref`.
   builder.ref_type(live_ref);
-  const TypeIdx raw = builder.raw_pointer_type(i32, false);
-  const TypeIdx const_arg = builder.const_type(42);
-  const TypeIdx slice = builder.slice_type(i32);
-  builder.never_type();
-  CHECK(raw.is_valid());
-  CHECK(const_arg.is_valid());
-  CHECK(slice.is_valid());
+  CHECK(builder.raw_pointer_type(i32, false).is_valid());
+  CHECK(builder.raw_pointer_type(i32, true).is_valid());
+  CHECK(builder.const_type(99).is_valid());
+  CHECK(builder.slice_type(i32).is_valid());
+  CHECK(builder.never_type().is_valid());
 
   builder.rollback(cp);
   CHECK(builder.state().types.size() == cp.types);
   CHECK(builder.reference_type(i32, false) == live_ref);
-
-  const TypeIdx raw_again = builder.raw_pointer_type(i32, false);
-  CHECK(raw_again.is_valid());
-  CHECK(builder.types()[raw_again].tag == TypeTag::RawPtr);
-  const TypeIdx const_again = builder.const_type(42);
-  CHECK(const_again.is_valid());
-  CHECK(builder.types()[const_again].tag == TypeTag::Const);
-  const TypeIdx never_again = builder.never_type();
-  CHECK(builder.types()[never_again].tag == TypeTag::Never);
+  CHECK(builder.reference_type(i32, true) == live_mut);
+  CHECK(builder.raw_pointer_type(i32, false) == live_raw);
+  CHECK(builder.raw_pointer_type(i32, true) == live_raw_mut);
+  CHECK(builder.param_type(7) == live_param);
+  ir::TypeSeq again;
+  again.push(i32);
+  CHECK(builder.tuple_type(again.finish()) == live_tuple);
+  CHECK(builder.const_type(42) == live_const);
+  CHECK(builder.never_type().is_valid());
+  CHECK(builder.error_type() == live_error);
   CHECK(std::move(builder).build().is_ok());
 }
 

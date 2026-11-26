@@ -185,6 +185,7 @@ RunResult run_function(const Fixture& f,
 // Both sides carry one value; integers wrap like the opcodes that
 // produced them, so the comparison reads through the type's width.
 void check_same_value(const ir::Storage& storage,
+                      const ir::SymbolTable& strings,
                       const comp::CompVal& expected,
                       const comp::CompVal& actual) {
   CHECK(expected.type.idx == actual.type.idx);
@@ -203,7 +204,12 @@ void check_same_value(const ir::Storage& storage,
     return;
   }
   if (expected.value.tag == comp::CompValue::Tag::Str) {
+    CHECK(expected.value.str_id == actual.value.str_id);
+    CHECK(expected.value.str_offset == actual.value.str_offset);
+    CHECK(expected.value.str_length == actual.value.str_length);
     CHECK(expected.value.owned_str == actual.value.owned_str);
+    CHECK(comp::string_bytes(expected.value, strings) ==
+          comp::string_bytes(actual.value, strings));
     return;
   }
   if (expected.value.tag == comp::CompValue::Tag::Enum) {
@@ -218,7 +224,7 @@ void check_same_value(const ir::Storage& storage,
       return;
     }
     for (usize i = 0; i < expected.value.fields.size(); ++i) {
-      check_same_value(storage,
+      check_same_value(storage, strings,
                        comp::CompVal{expected.value.fields[i], expected.type},
                        comp::CompVal{actual.value.fields[i], actual.type});
     }
@@ -302,7 +308,8 @@ bool check_checker_and_lowered_value(const Scenario& scenario,
   if (!run.ok) {
     return false;
   }
-  check_same_value(storage, scenario.asts[index], run.value);
+  check_same_value(storage, scenario.fixture.strings, scenario.asts[index],
+                   run.value);
   return true;
 }
 
@@ -392,7 +399,8 @@ TEST_CASE("Checker and lowering read one value from branches and arithmetic") {
   if (!run.ok || scenario.asts.size() != 1) {
     return;
   }
-  check_same_value(storage, scenario.asts[0], run.value);
+  check_same_value(storage, scenario.fixture.strings, scenario.asts[0],
+                   run.value);
   check_int_value(storage, run.value, 25);
 }
 
@@ -440,7 +448,8 @@ TEST_CASE("Checker and lowering read one value from a while loop") {
   if (!run.ok || scenario.asts.size() != 1) {
     return;
   }
-  check_same_value(storage, scenario.asts[0], run.value);
+  check_same_value(storage, scenario.fixture.strings, scenario.asts[0],
+                   run.value);
   check_int_value(storage, run.value, 45);
 }
 
@@ -484,14 +493,16 @@ TEST_CASE("Checker and lowering read one value from a direct call") {
                                           no_args, comp::COMP_BRANCH_QUOTA, 0);
   CHECK(quad_run.ok);
   if (quad_run.ok) {
-    check_same_value(storage, scenario.asts[0], quad_run.value);
+    check_same_value(storage, scenario.fixture.strings, scenario.asts[0],
+                     quad_run.value);
     check_int_value(storage, quad_run.value, 84);
   }
   const RunResult double_run = run_function(
       scenario.fixture, storage, doubled, no_args, comp::COMP_BRANCH_QUOTA, 0);
   CHECK(double_run.ok);
   if (double_run.ok) {
-    check_same_value(storage, scenario.asts[1], double_run.value);
+    check_same_value(storage, scenario.fixture.strings, scenario.asts[1],
+                     double_run.value);
     check_int_value(storage, double_run.value, 42);
   }
 }
@@ -536,7 +547,8 @@ TEST_CASE("Checker and lowering read one value from casts and signed shifts") {
   if (!run.ok || scenario.asts.size() != 1) {
     return;
   }
-  check_same_value(storage, scenario.asts[0], run.value);
+  check_same_value(storage, scenario.fixture.strings, scenario.asts[0],
+                   run.value);
 }
 
 TEST_CASE("Comp evaluation widens a negative value by its sign") {
@@ -634,7 +646,8 @@ TEST_CASE(
   if (!run.ok || scenario.asts.size() != 1) {
     return;
   }
-  check_same_value(storage, scenario.asts[0], run.value);
+  check_same_value(storage, scenario.fixture.strings, scenario.asts[0],
+                   run.value);
   check_int_value(storage, run.value, 102);
 }
 
@@ -677,7 +690,8 @@ TEST_CASE("Checker and lowering read one value from booleans") {
   if (!run.ok || scenario.asts.size() != 1) {
     return;
   }
-  check_same_value(storage, scenario.asts[0], run.value);
+  check_same_value(storage, scenario.fixture.strings, scenario.asts[0],
+                   run.value);
   CHECK(run.value.value.tag == comp::CompValue::Tag::Bool);
   CHECK(run.value.value.bool_value);
 }
@@ -1107,11 +1121,14 @@ TEST_CASE(
   if (!carried.ok || !given.ok || !denied.ok) {
     return;
   }
-  check_same_value(storage, scenario.asts[0], carried.value);
+  check_same_value(storage, scenario.fixture.strings, scenario.asts[0],
+                   carried.value);
   check_int_value(storage, carried.value, 42);
-  check_same_value(storage, scenario.asts[1], given.value);
+  check_same_value(storage, scenario.fixture.strings, scenario.asts[1],
+                   given.value);
   check_int_value(storage, given.value, 100);
-  check_same_value(storage, scenario.asts[2], denied.value);
+  check_same_value(storage, scenario.fixture.strings, scenario.asts[2],
+                   denied.value);
   check_int_value(storage, denied.value, 0);
 }
 
@@ -1180,11 +1197,14 @@ TEST_CASE("Checker and lowering read one value from a niche-carrying enum") {
   if (!set.ok || !unset.ok || !empty.ok) {
     return;
   }
-  check_same_value(storage, scenario.asts[0], set.value);
+  check_same_value(storage, scenario.fixture.strings, scenario.asts[0],
+                   set.value);
   check_int_value(storage, set.value, 1);
-  check_same_value(storage, scenario.asts[1], unset.value);
+  check_same_value(storage, scenario.fixture.strings, scenario.asts[1],
+                   unset.value);
   check_int_value(storage, unset.value, 2);
-  check_same_value(storage, scenario.asts[2], empty.value);
+  check_same_value(storage, scenario.fixture.strings, scenario.asts[2],
+                   empty.value);
   check_int_value(storage, empty.value, 3);
 }
 
