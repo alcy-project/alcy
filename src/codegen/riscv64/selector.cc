@@ -149,6 +149,11 @@ class Selector {
         return Operand{value_reg};
       }
     }
+    if (operand.is<ir::ExternalFunctionIdx>()) {
+      const auto& fn =
+          storage_.external_functions()[operand.as_external_function()];
+      return Operand{string_ref(std::string(strings_.get(fn.meta.name)))};
+    }
     return std::nullopt;
   }
 
@@ -1949,8 +1954,10 @@ bool Selector::emit_call(const ir::Instruction& instr, const diag::Span span) {
     // Resolve a direct call through a full-width address pair. The
     // backend patches the auipc/addi once offsets are known, so the call
     // never needs an instruction inserted after layout was fixed.
-    push(make_inst(MOp::Auipc, 8, Operand{T0}, Operand{Imm{0}}));
-    push(make_inst(MOp::Addi, 8, Operand{T0}, Operand{T0},
+    // LoadAddr survives allocation as a pseudo-instruction; the backend
+    // expands it into auipc/addi after symbol resolution, so an external
+    // name can stay a SymbolRef for the linker.
+    push(make_inst(MOp::LoadAddr, 8, Operand{T0},
                    Operand{SymbolRef{symbol_id}}));
     MInst call =
         make_inst(MOp::Jalr, 8, Operand{RA}, Operand{T0}, Operand{Imm{0}});

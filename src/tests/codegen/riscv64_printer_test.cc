@@ -116,4 +116,45 @@ TEST_CASE("The riscv64 printer names a resolved jump target") {
   CHECK(contains(text, "\tjal ra, main\n"));
 }
 
+TEST_CASE("The riscv64 printer spells external symbol addresses") {
+  Body body;
+  body.symbols.push_back("foreign");
+  body.insts.push_back(
+      make_inst(MOp::Auipc, 8, Operand{T0}, Operand{SymbolRef{0}}));
+  body.insts.push_back(
+      make_inst(MOp::Addi, 8, Operand{T0}, Operand{T0}, Operand{SymbolRef{0}}));
+  body.insts.push_back(
+      make_inst(MOp::Jalr, 8, Operand{RA}, Operand{T0}, Operand{Imm{0}}));
+  object::Object object = text_object(body.insts.size() * 4);
+  for (u32 i = 0; i < body.insts.size(); ++i) {
+    object.symbols.push_back(object::Symbol{.name = "fn",
+                                            .section = 0,
+                                            .offset = static_cast<u64>(i) * 4,
+                                            .size = 4,
+                                            .bind = object::SymbolBind::Local,
+                                            .type = object::SymbolType::Func});
+  }
+  std::vector<PrintedBody> bodies{PrintedBody{
+      "fn", body, object::SymbolBind::Local, 0, body.insts.size() * 4}};
+  const std::string text = print_assembly(object, bodies);
+  CHECK(contains(text, "\tauipc t0, %pcrel_hi(foreign)\n"));
+  CHECK(contains(text, "\taddi t0, t0, %lo(foreign)\n"));
+}
+
+TEST_CASE("The riscv64 printer replaces colons in symbol names") {
+  Body body;
+  body.insts.push_back(make_inst(MOp::Nop, 8));
+  object::Object object = text_object(4);
+  object.symbols.push_back(object::Symbol{.name = "_A1f0:4:main",
+                                          .section = 0,
+                                          .offset = 0,
+                                          .size = 4,
+                                          .bind = object::SymbolBind::Local,
+                                          .type = object::SymbolType::Func});
+  std::vector<PrintedBody> bodies{
+      PrintedBody{"_A1f0:4:main", body, object::SymbolBind::Local, 0, 4}};
+  const std::string text = print_assembly(object, bodies);
+  CHECK(contains(text, "_A1f0_4_main:\n"));
+}
+
 }  // namespace codegen::riscv64

@@ -210,8 +210,10 @@ Encoded encode(const Body& body) {
         break;
       case MOp::Jal:
         if (const Label* label = label_of(inst.at(1)); label != nullptr) {
-          encoded.patches.push_back(Encoded::Patch{
-              .offset = encoded.bytes.size(), .label = label->id});
+          encoded.patches.push_back(
+              Encoded::Patch{.offset = encoded.bytes.size(),
+                             .label = label->id,
+                             .symbol = ""});
           word = j_type(0, reg(inst.at(0)), JAL);
         } else {
           word = j_type(imm(inst.at(1)), reg(inst.at(0)), JAL);
@@ -228,8 +230,10 @@ Encoded encode(const Body& body) {
       case MOp::Bltu:
       case MOp::Bgeu:
         if (const Label* label = label_of(inst.at(2)); label != nullptr) {
-          encoded.patches.push_back(Encoded::Patch{
-              .offset = encoded.bytes.size(), .label = label->id});
+          encoded.patches.push_back(
+              Encoded::Patch{.offset = encoded.bytes.size(),
+                             .label = label->id,
+                             .symbol = ""});
           word = b_type(0, reg(inst.at(1)), reg(inst.at(0)),
                         branch_funct3(inst.cond), BRANCH);
         } else {
@@ -417,6 +421,20 @@ Encoded encode(const Body& body) {
       default: {
         u32 funct7 = 0;
         const u32 funct3 = alu_funct(inst.op, funct7);
+        // A symbol that survived resolution names an external definition.
+        // Leave a zero placeholder; the object writer turns this into a
+        // CALL_PLT relocation the linker resolves.
+        for (const Operand& op : inst.ops) {
+          if (const SymbolRef* symbol = std::get_if<SymbolRef>(&op)) {
+            if (symbol->id < body.symbols.size()) {
+              encoded.patches.push_back(
+                  Encoded::Patch{.offset = encoded.bytes.size(),
+                                 .label = 0,
+                                 .symbol = body.symbols[symbol->id]});
+            }
+            break;
+          }
+        }
         const AluOperands alu = alu_operands(inst);
         const Operand* immediate = alu.immediate;
         if (immediate != nullptr) {
@@ -449,6 +467,9 @@ Encoded encode(const Body& body) {
     encoded.bytes.push_back(static_cast<u8>((word >> 24) & 0xff));
   }
   for (const Encoded::Patch& patch : encoded.patches) {
+    if (!patch.symbol.empty()) {
+      continue;  // resolved by the linker through an ELF relocation
+    }
     const i64 delta = static_cast<i64>(encoded.label_offsets[patch.label]) -
                       static_cast<i64>(patch.offset);
     const u32 word = static_cast<u32>(encoded.bytes[patch.offset]) |

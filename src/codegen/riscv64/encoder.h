@@ -18,7 +18,10 @@ struct Encoded {
   std::vector<u64> label_offsets;
   struct Patch {
     u64 offset = 0;
+    // Label patches are resolved locally; symbol patches survive as ELF
+    // relocations for names another object carries.
     u32 label = 0;
+    std::string symbol;
   };
   std::vector<Patch> patches;
 };

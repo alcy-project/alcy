@@ -154,6 +154,17 @@ std::string reg_ref_name(const RegRef& ref) {
   return "<vreg>";
 }
 
+// Mangled names may carry ':' which GNU as reads as a label suffix.
+std::string asm_name(const std::string& name) {
+  std::string out = name;
+  for (char& c : out) {
+    if (c == ':') {
+      c = '_';
+    }
+  }
+  return out;
+}
+
 // A data symbol is materialized by an auipc/addi pair; print the pair in
 // the pseudo form that names the symbol directly.
 std::string symbol_name(const SymbolRef symbol, const Body& body) {
@@ -200,6 +211,14 @@ std::string instruction(const MInst& inst,
   switch (inst.op) {
     case MOp::Lui:
     case MOp::Auipc: {
+      if (const SymbolRef* symbol = std::get_if<SymbolRef>(&inst.at(1))) {
+        if (symbol->id < body.symbols.size()) {
+          return std::string(inst.op == MOp::Lui ? "lui " : "auipc ") + a(0) +
+                 ", " +
+                 std::string(inst.op == MOp::Lui ? "%hi(" : "%pcrel_hi(") +
+                 asm_name(body.symbols[symbol->id]) + ")";
+        }
+      }
       const i64 encoded = std::holds_alternative<Imm>(inst.at(1))
                               ? std::get<Imm>(inst.at(1)).value
                               : 0;
@@ -287,6 +306,17 @@ std::string instruction(const MInst& inst,
     case MOp::Divu:
     case MOp::Rem:
     case MOp::Remu: {
+      for (const Operand& op : inst.ops) {
+        if (const SymbolRef* symbol = std::get_if<SymbolRef>(&op)) {
+          if (symbol->id < body.symbols.size()) {
+            const char* mnemonic = alu_name(inst.op).imm != nullptr
+                                       ? alu_name(inst.op).imm
+                                       : "addi";
+            return std::string(mnemonic) + " " + a(0) + ", " + a(1) + ", %lo(" +
+                   asm_name(body.symbols[symbol->id]) + ")";
+          }
+        }
+      }
       const AluName name = alu_name(inst.op);
       const AluOperands alu = alu_operands(inst);
       if (alu.immediate != nullptr && name.imm != nullptr) {
@@ -421,10 +451,10 @@ std::string print_assembly(const object::Object& object,
       continue;
     }
     if (symbol.bind == object::SymbolBind::Global) {
-      out += "\t.globl " + symbol.name + "\n";
+      out += "\t.globl " + asm_name(symbol.name) + "\n";
     }
     if (symbol.type == object::SymbolType::Func) {
-      out += "\t.type " + symbol.name + ",@function\n";
+      out += "\t.type " + asm_name(symbol.name) + ",@function\n";
     }
   }
 
@@ -464,13 +494,13 @@ std::string print_assembly(const object::Object& object,
     for (const object::Symbol& symbol : object.symbols) {
       if (symbol.section == 0 && symbol.offset == at &&
           !(symbol.type == object::SymbolType::Func && is_body)) {
-        label(symbol.name);
+        label(asm_name(symbol.name));
       }
     }
     if (is_body) {
       const PrintedBody& printed = *ordered[body_at];
-      const std::string prefix = printed.symbol + ".";
-      label(printed.symbol);
+      const std::string prefix = asm_name(printed.symbol) + ".";
+      label(asm_name(printed.symbol));
       for (u32 inst_index = 0; inst_index < printed.body.insts.size();
            ++inst_index) {
         const MInst& inst = printed.body.insts[inst_index];
@@ -482,7 +512,8 @@ std::string print_assembly(const object::Object& object,
                            printed.offset + static_cast<u64>(inst_index) * 4) +
                "\n";
       }
-      out += "\t.size " + printed.symbol + ", .-" + printed.symbol + "\n";
+      out += "\t.size " + asm_name(printed.symbol) + ", .-" +
+             asm_name(printed.symbol) + "\n";
     } else {
       const usize end = std::min(next, text.size());
       emit_bytes(out, std::vector<u8>(text.begin() + at, text.begin() + end));

@@ -235,7 +235,7 @@ base::Result<std::vector<u8>, codegen::EmitError> Riscv64::emit(
     std::vector<MInst> expanded;
     for (MInst& inst : body.insts) {
       if (inst.op == MOp::LoadAddr) {
-        MInst hi = make_inst(MOp::Auipc, 8, inst.ops[0], Operand{Imm{0}});
+        MInst hi = make_inst(MOp::Auipc, 8, inst.ops[0], inst.ops[1]);
         hi.label = inst.label;
         expanded.push_back(hi);
         expanded.push_back(
@@ -383,9 +383,12 @@ base::Result<std::vector<u8>, codegen::EmitError> Riscv64::emit(
         }
         auto found = offsets.find(body.symbols[symbol->id]);
         if (found == offsets.end()) {
-          // No relocations are emitted, so an unresolved name can only
-          // encode a call to the current PC. Refuse the object instead.
-          return base::make_err(codegen::EmitError::Unsupported);
+          // An external name survives as a relocation; the encoder emits
+          // a placeholder the linker fills in.
+          if (runtime::defines(body.symbols[symbol->id])) {
+            return base::make_err(codegen::EmitError::Unsupported);
+          }
+          continue;
         }
         const i64 here = base_of[f] + static_cast<i64>(i) * 4;
         if (inst.op == MOp::Addi && inst.count > 2 &&
@@ -452,6 +455,15 @@ base::Result<std::vector<u8>, codegen::EmitError> Riscv64::emit(
                                                : object::SymbolBind::Global,
                       static_cast<u64>(base_of[fi]),
                       static_cast<u64>(functions[fi].body.insts.size() * 4)});
+    }
+    // The encoder resolves symbol operands through Body::symbols; carry
+    // each function's table into the concatenated body so external names
+    // can survive as relocations.
+    for (const std::string& symbol : selected.body.symbols) {
+      if (std::find(whole.symbols.begin(), whole.symbols.end(), symbol) ==
+          whole.symbols.end()) {
+        whole.symbols.push_back(symbol);
+      }
     }
     whole.insts.insert(whole.insts.end(), selected.body.insts.begin(),
                        selected.body.insts.end());
@@ -545,6 +557,30 @@ base::Result<std::vector<u8>, codegen::EmitError> Riscv64::emit(
           .type = object::SymbolType::Func,
       });
     }
+  }
+  // External names survive as symbol patches. Turn them into ELF
+  // relocations and undefined symbols so the linker supplies the address.
+  std::unordered_set<std::string> carried;
+  for (const object::Symbol& symbol : object.symbols) {
+    carried.insert(symbol.name);
+  }
+  for (const Encoded::Patch& patch : code.patches) {
+    if (patch.symbol.empty() || !carried.insert(patch.symbol).second) {
+      continue;
+    }
+    object.relocations.push_back(object::Relocation{
+        .section = 0,
+        .offset = patch.offset,
+        .kind = object::RelocKind::Plt32,
+        .symbol = patch.symbol,
+        .addend = 0,
+    });
+    object.symbols.push_back(object::Symbol{
+        .name = patch.symbol,
+        .section = object::Symbol::UNDEFINED,
+        .bind = object::SymbolBind::Global,
+        .type = object::SymbolType::Func,
+    });
   }
   object.sections.push_back(std::move(text));
   if (want_assembly) {

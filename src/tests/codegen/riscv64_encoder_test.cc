@@ -62,4 +62,15 @@ TEST_CASE("integer to double conversions use the double format") {
   CHECK(equals(from_word.bytes, {0x53, 0x80, 0x00, 0xd2}));
 }
 
+TEST_CASE("An external symbol survives as a symbol patch") {
+  Body body;
+  body.symbols.push_back("foreign");
+  body.insts.push_back(
+      make_inst(MOp::Addi, 8, Operand{T0}, Operand{T0}, Operand{SymbolRef{0}}));
+  const Encoded encoded = encode(body);
+  CHECK(encoded.patches.size() == 1);
+  CHECK(encoded.patches[0].symbol == "foreign");
+  CHECK(encoded.patches[0].offset == 0);
+}
+
 }  // namespace codegen::riscv64
