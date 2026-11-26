@@ -146,6 +146,16 @@ enum class Opcode : u8 {
   // semantic string value, the start index and the end index; the result
   // is a semantic view over the same pooled bytes.
   CompStrSlice,
+  // Read the variant tag of a semantic value at runtime.
+  CompVariantTag,
+  // Read field `index` of a semantic aggregate at runtime.
+  CompField,
+  // Read element `index` of a semantic array at runtime.
+  CompArrayIndex,
+  // Build an enum value at runtime: variant index followed by fields.
+  CompMakeVariant,
+  // Length of a compile-time string at runtime.
+  CompStrLen,
 };
 
 constexpr const char* opcode_to_str(const Opcode opcode) {
@@ -179,6 +189,11 @@ constexpr const char* opcode_to_str(const Opcode opcode) {
     case O::CompValue: return "CompValue";
     case O::CompStrByte: return "CompStrByte";
     case O::CompStrSlice: return "CompStrSlice";
+    case O::CompVariantTag: return "CompVariantTag";
+    case O::CompField: return "CompField";
+    case O::CompArrayIndex: return "CompArrayIndex";
+    case O::CompMakeVariant: return "CompMakeVariant";
+    case O::CompStrLen: return "CompStrLen";
 
     case O::And: return "And";
     case O::Or: return "Or";

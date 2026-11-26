@@ -116,6 +116,11 @@ constexpr OperandArity operand_arity(const Opcode op) {
     case O::CompValue: return {1, 1, true};
     case O::CompStrByte: return {2, 2, true};
     case O::CompStrSlice: return {3, 3, true};
+    case O::CompVariantTag: return {1, 1, true};
+    case O::CompField: return {2, 2, true};
+    case O::CompArrayIndex: return {2, 2, true};
+    case O::CompMakeVariant: return {1, 0xFFFFFFFFu, true};
+    case O::CompStrLen: return {1, 1, true};
   }
   return {};
 }
@@ -251,7 +256,9 @@ VerificationResult check_resolved_body(const Storage& storage,
     for (const InstructionIdx iidx : block.instrs) {
       const Opcode op = storage.instrs()[iidx].op;
       if (op == Opcode::CompValue || op == Opcode::CompStrByte ||
-          op == Opcode::CompStrSlice) {
+          op == Opcode::CompStrSlice || op == Opcode::CompVariantTag ||
+          op == Opcode::CompField || op == Opcode::CompArrayIndex ||
+          op == Opcode::CompMakeVariant || op == Opcode::CompStrLen) {
         return err(VerificationErrorKind::MisplacedSemanticMarker, iidx.idx);
       }
     }

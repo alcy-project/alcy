@@ -219,6 +219,10 @@ class Interpreter {
   base::Result<CompVal, IrRunError> to_result(const Returned& returned);
   bool zero_sized_value(ir::TypeIdx type, CompValue& out);
   bool read_value(ir::TypeIdx type, u64 address, CompValue& out);
+  bool write_value(ir::TypeIdx type,
+                   u64 address,
+                   const CompValue& value,
+                   ir::InstructionIdx instr);
 
   const ir::StorageState& storage_;
   const ir::SymbolTable& strings_;
@@ -346,14 +350,30 @@ bool Interpreter::read(ir::TypeIdx type,
     return fail(IrRunError::Kind::Unsupported, instr,
                 "float load in comp evaluation");
   }
-  return fail(IrRunError::Kind::Unsupported, instr,
-              "aggregate load in comp evaluation");
+  CompVal loaded;
+  loaded.type = type;
+  if (!read_value(type, address, loaded.value)) {
+    return false;
+  }
+  runtime_values_.push_back(std::move(loaded));
+  out =
+      Slot{Slot::Kind::Semantic,
+           static_cast<u32>(comp_values_.size() + runtime_values_.size() - 1)};
+  return true;
 }
 
 bool Interpreter::write(ir::TypeIdx type,
                         const Slot& value,
                         u64 address,
                         ir::InstructionIdx instr) {
+  if (value.kind == Slot::Kind::Semantic) {
+    const CompVal* semantic = semantic_value(value);
+    if (semantic == nullptr) {
+      return fail(IrRunError::Kind::Internal, instr,
+                  "store of a missing semantic value");
+    }
+    return write_value(type, address, semantic->value, instr);
+  }
   const TypeTag tag = tag_of(type);
   if (ir::is_integer_type(tag)) {
     if (value.kind != Slot::Kind::Scalar) {
@@ -1082,6 +1102,131 @@ bool Interpreter::execute_instruction(ir::InstructionIdx instr,
           static_cast<u32>(comp_values_.size() + runtime_values_.size() - 1)};
       return true;
     }
+    case Opcode::CompMakeVariant: {
+      if (ins.operands.size() < 1 || !ins.dst.is_valid()) {
+        return fail(IrRunError::Kind::Internal, instr,
+                    "variant construction needs a tag");
+      }
+      u64 variant = 0;
+      if (!resolve_int_at(instr, 0, frame, variant)) {
+        return fail(IrRunError::Kind::Internal, instr,
+                    "variant construction without a tag");
+      }
+      CompVal made;
+      made.type = reg_type(ins.dst);
+      made.value.tag = CompValue::Tag::Enum;
+      made.value.variant = static_cast<u32>(variant);
+      for (u32 i = 1; i < ins.operands.size(); ++i) {
+        Slot field_slot;
+        if (!resolve_at(instr, i, frame, field_slot)) {
+          return false;
+        }
+        CompValue field;
+        if (field_slot.kind == Slot::Kind::Semantic) {
+          const CompVal* value = semantic_value(field_slot);
+          if (value == nullptr) {
+            return fail(IrRunError::Kind::Internal, instr,
+                        "variant field without a semantic value");
+          }
+          field = value->value;
+        } else {
+          const ir::TypeIdx type = operand_at(instr, i).type;
+          const TypeTag tag = tag_of(type);
+          field.tag =
+              tag == TypeTag::I1 ? CompValue::Tag::Bool : CompValue::Tag::Int;
+          field.int_value = field_slot.bits & int_mask(tag);
+          field.bool_value = field_slot.bits != 0;
+        }
+        made.value.fields.push_back(std::move(field));
+      }
+      runtime_values_.push_back(std::move(made));
+      frame.at(ins.dst.idx) = Slot{
+          Slot::Kind::Semantic,
+          static_cast<u32>(comp_values_.size() + runtime_values_.size() - 1)};
+      return true;
+    }
+    case Opcode::CompStrLen: {
+      if (ins.operands.size() < 1 || !ins.dst.is_valid()) {
+        return fail(IrRunError::Kind::Internal, instr,
+                    "string length needs a string value");
+      }
+      Slot slot;
+      const CompVal* value = nullptr;
+      if (!resolve_at(instr, 0, frame, slot) ||
+          slot.kind != Slot::Kind::Semantic ||
+          (value = semantic_value(slot)) == nullptr ||
+          value->value.tag != CompValue::Tag::Str) {
+        return fail(IrRunError::Kind::Internal, instr,
+                    "string length without a string value");
+      }
+      frame.at(ins.dst.idx) =
+          Slot{Slot::Kind::Scalar, 0,
+               comp::string_bytes(value->value, strings_).size()};
+      return true;
+    }
+    case Opcode::CompVariantTag: {
+      if (ins.operands.size() < 1 || !ins.dst.is_valid()) {
+        return fail(IrRunError::Kind::Internal, instr,
+                    "variant tag needs a semantic value");
+      }
+      Slot slot;
+      const CompVal* value = nullptr;
+      if (!resolve_at(instr, 0, frame, slot) ||
+          slot.kind != Slot::Kind::Semantic ||
+          (value = semantic_value(slot)) == nullptr ||
+          value->value.tag != CompValue::Tag::Enum) {
+        return fail(IrRunError::Kind::Internal, instr,
+                    "variant tag without an enum value");
+      }
+      frame.at(ins.dst.idx) = Slot{Slot::Kind::Scalar, 0, value->value.variant};
+      return true;
+    }
+    case Opcode::CompField:
+    case Opcode::CompArrayIndex: {
+      const bool array = ins.op == Opcode::CompArrayIndex;
+      if (ins.operands.size() < 2 || !ins.dst.is_valid()) {
+        return fail(IrRunError::Kind::Internal, instr,
+                    "semantic element access needs two operands");
+      }
+      Slot slot;
+      const CompVal* aggregate = nullptr;
+      if (!resolve_at(instr, 0, frame, slot) ||
+          slot.kind != Slot::Kind::Semantic ||
+          (aggregate = semantic_value(slot)) == nullptr ||
+          ((array && aggregate->value.tag != CompValue::Tag::Array) ||
+           (!array && aggregate->value.tag != CompValue::Tag::Enum &&
+            aggregate->value.tag != CompValue::Tag::Struct &&
+            aggregate->value.tag != CompValue::Tag::Tuple))) {
+        return fail(IrRunError::Kind::Internal, instr,
+                    "semantic aggregate access on a wrong value");
+      }
+      u64 index = 0;
+      if (!resolve_int_at(instr, 1, frame, index) ||
+          index >= aggregate->value.fields.size()) {
+        return fail(IrRunError::Kind::OutOfBounds, instr,
+                    "semantic field index out of bounds");
+      }
+      const CompValue& field =
+          aggregate->value.fields[static_cast<usize>(index)];
+      const ir::TypeIdx field_type = reg_type(ins.dst);
+      if (field.tag == CompValue::Tag::Int ||
+          field.tag == CompValue::Tag::Bool) {
+        const u64 bits = field.tag == CompValue::Tag::Bool
+                             ? (field.bool_value ? 1u : 0u)
+                             : field.int_value;
+        frame.at(ins.dst.idx) =
+            Slot{Slot::Kind::Scalar, 0, bits & int_mask(tag_of(field_type))};
+        return true;
+      }
+      CompVal result;
+      result.type = field_type;
+      result.value = field;
+      runtime_values_.push_back(std::move(result));
+      frame.at(ins.dst.idx) = Slot{
+          Slot::Kind::Semantic,
+          static_cast<u32>(comp_values_.size() + runtime_values_.size() - 1)};
+      return true;
+    }
   }
   return fail(IrRunError::Kind::Internal, instr, "unknown opcode");
 }
@@ -1599,6 +1744,93 @@ bool Interpreter::zero_sized_value(ir::TypeIdx type, CompValue& out) {
                   ir::InstructionIdx(base::INVALID_IDX),
                   "zero-sized value in comp evaluation");
   }
+}
+
+bool Interpreter::write_value(ir::TypeIdx type,
+                              u64 address,
+                              const CompValue& value,
+                              ir::InstructionIdx instr) {
+  const TypeTag tag = tag_of(type);
+  if (ir::is_integer_type(tag)) {
+    const u64 bits = value.tag == CompValue::Tag::Bool
+                         ? (value.bool_value ? 1u : 0u)
+                         : value.int_value;
+    return write_bytes(address, layout_of(type).size, bits & int_mask(tag),
+                       instr);
+  }
+  if (tag == TypeTag::Struct || tag == TypeTag::Tuple) {
+    ir::TypeIdxRange fields;
+    if (tag == TypeTag::Struct) {
+      fields = storage_.struct_types[storage_.types[type].as_struct()].fields;
+    } else {
+      fields = storage_.tuple_types[storage_.types[type].as_tuple()].elements;
+    }
+    if (fields.size() != value.fields.size()) {
+      return fail(IrRunError::Kind::Internal, instr,
+                  "aggregate store arity mismatch");
+    }
+    for (u32 i = 0; i < fields.size(); ++i) {
+      const u64 at = address + ir::field_offset(storage_, fields, i, width_);
+      if (!write_value(fields[i], at, value.fields[i], instr)) {
+        return false;
+      }
+    }
+    return true;
+  }
+  if (tag == TypeTag::Array) {
+    const ir::ArrayType& shape =
+        storage_.array_types[storage_.types[type].as_array()];
+    if (shape.count != value.fields.size()) {
+      return fail(IrRunError::Kind::Internal, instr,
+                  "array store arity mismatch");
+    }
+    for (u64 i = 0; i < shape.count; ++i) {
+      const u64 at = address + i * layout_of(shape.element).size;
+      if (!write_value(shape.element, at, value.fields[static_cast<usize>(i)],
+                       instr)) {
+        return false;
+      }
+    }
+    return true;
+  }
+  if (tag == TypeTag::Enum) {
+    if (ir::enum_is_zst(storage_, type)) {
+      return true;
+    }
+    if (ir::enum_niche(storage_, type).has) {
+      return fail(IrRunError::Kind::Unsupported, instr,
+                  "niche enum in comp evaluation");
+    }
+    const u64 tag_bytes = ir::enum_tag_width(storage_, type);
+    if (!write_bytes(address, tag_bytes, value.variant, instr)) {
+      return false;
+    }
+    const ir::EnumType& shape =
+        storage_.enum_types[storage_.types[type].as_enum()];
+    if (value.variant >= shape.variants.size()) {
+      return fail(IrRunError::Kind::Internal, instr,
+                  "enum store variant out of range");
+    }
+    const ir::TypeIdxRange fields =
+        storage_.enum_variant_types[shape.variants[value.variant]].fields;
+    if (fields.size() != value.fields.size()) {
+      return fail(IrRunError::Kind::Internal, instr,
+                  "enum store arity mismatch");
+    }
+    const ir::TypeLayout area = ir::enum_payload_area(storage_, type, width_);
+    const u64 align_mask = area.align == 0 ? 0 : area.align - 1;
+    const u64 area_at = (tag_bytes + align_mask) & ~align_mask;
+    for (u32 i = 0; i < fields.size(); ++i) {
+      const u64 at =
+          address + area_at + ir::field_offset(storage_, fields, i, width_);
+      if (!write_value(fields[i], at, value.fields[i], instr)) {
+        return false;
+      }
+    }
+    return true;
+  }
+  return fail(IrRunError::Kind::Unsupported, instr,
+              "string store in comp evaluation");
 }
 
 bool Interpreter::read_value(ir::TypeIdx type, u64 address, CompValue& out) {
