@@ -410,15 +410,19 @@ jobs:
           - name: Format
             command: uv run ./tools/check_fmt.py --build-subdir=build
             bun: false
+            qemu: false
           - name: Borrow Rules
             command: uv run ./tools/check_borrow_rules.py --build-subdir=build
             bun: false
+            qemu: false
           - name: Wasm Acceptance
             command: uv run ./tools/check_cases.py --cases-root=e2e/wasm --steps=cli,program --mode=wasm --build-subdir=build
             bun: true
+            qemu: false
           - name: Wasm Programs
             command: uv run ./tools/check_cases.py --steps=program --mode=wasm --build-subdir=build
             bun: true
+            qemu: false
           - name: Riscv64 Programs
             command: uv run ./tools/check_cases.py --steps=program --mode=qemu --build-subdir=build
             bun: false
