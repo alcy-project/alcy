@@ -146,11 +146,16 @@ class ConstEmitter {
   void set_loop_targets(ir::BlockIdx brk, ir::BlockIdx cont) {
     break_target_ = brk;
     continue_target_ = cont;
+    ++loop_depth_;
   }
   void clear_loop_targets() {
     break_target_ = ir::BlockIdx(base::INVALID_IDX);
     continue_target_ = ir::BlockIdx(base::INVALID_IDX);
+    if (loop_depth_ != 0) {
+      --loop_depth_;
+    }
   }
+  bool in_loop() const { return loop_depth_ != 0; }
   ir::BlockIdx break_target() const { return break_target_; }
   ir::BlockIdx continue_target() const { return continue_target_; }
 
@@ -333,6 +338,16 @@ class ConstEmitter {
   }
   void leave_inline() { --inline_depth_; }
 
+  // A value produced by a runtime semantic opcode has no compile-time
+  // representation; drop any tag attached to its operand or register.
+  void clear_semantic(ir::OperandIdx operand) {
+    semantic_by_operand_.erase(operand.idx);
+    const ir::Operand& op = builder_.state().operands[operand.idx];
+    if (op.is<ir::RegisterIdx>()) {
+      semantic_by_register_.erase(op.as_register().idx);
+    }
+  }
+
   usize value_bindings_size() const { return value_bindings_.size(); }
   void restore_value_bindings(usize size) {
     value_bindings_.erase(value_bindings_.begin() + size,
@@ -461,6 +476,7 @@ class ConstEmitter {
   u32 current_ = 0;
   bool terminated_ = false;
   bool broke_ = false;
+  u32 loop_depth_ = 0;
   ir::BlockIdx break_target_ = ir::BlockIdx(base::INVALID_IDX);
   ir::BlockIdx continue_target_ = ir::BlockIdx(base::INVALID_IDX);
 };
@@ -571,6 +587,134 @@ static comp::CompValue* semantic_slot(comp::CompValue& root,
   return cur;
 }
 
+// The address of an lvalue the emitter can read and write at runtime.
+// Scalars already use allocas; aggregates now do too, so a place chain
+// resolves to a GEP from the binding's address.
+static ir::OperandIdx emit_place_address(const ast::AstArena& ast,
+                                         ast::ExprIdx place,
+                                         ConstEmitter& emitter,
+                                         const EmitContext& ctx,
+                                         const ParamEnv* params) {
+  const ast::ExprNode& node = ast.exprs[place];
+  if (node.kind == ast::ExprKind::Path) {
+    const auto& segs =
+        ast.paths[node.payload.get<ast::ExprPath>().idx].segments;
+    if (segs.size() != 1) {
+      return ir::OperandIdx(base::INVALID_IDX);
+    }
+    if (const LocalBinding* local = emitter.lookup_local(segs[0].name)) {
+      return local->addr;
+    }
+    if (params != nullptr) {
+      for (const auto& [name, operand] : *params) {
+        if (name == segs[0].name) {
+          return operand;
+        }
+      }
+    }
+    return ir::OperandIdx(base::INVALID_IDX);
+  }
+  if (node.kind != ast::ExprKind::Field && node.kind != ast::ExprKind::Index) {
+    return ir::OperandIdx(base::INVALID_IDX);
+  }
+  const ir::OperandIdx base =
+      emit_place_address(ast,
+                         node.kind == ast::ExprKind::Field
+                             ? node.payload.get<ast::ExprField>().receiver
+                             : node.payload.get<ast::ExprIndex>().receiver,
+                         emitter, ctx, params);
+  if (!base.is_valid()) {
+    return ir::OperandIdx(base::INVALID_IDX);
+  }
+  ir::TypeIdx base_type = emitter.builder().state().operands[base.idx].type;
+  if (emitter.builder().state().types[base_type].tag == ir::TypeTag::Ref ||
+      emitter.builder().state().types[base_type].tag == ir::TypeTag::MutRef) {
+    base_type =
+        emitter.builder()
+            .state()
+            .ref_types[emitter.builder().state().types[base_type].as_ref()]
+            .pointee;
+  }
+  u32 index = 0;
+  ir::TypeIdx field_type = ir::TypeIdx(base::INVALID_IDX);
+  if (node.kind == ast::ExprKind::Field) {
+    const ast::ExprField& field = node.payload.get<ast::ExprField>();
+    if (emitter.builder().state().types[base_type].tag == ir::TypeTag::Tuple) {
+      bool digits = !field.name.name.empty();
+      for (char c : field.name.name) {
+        if (c < '0' || c > '9') {
+          digits = false;
+          break;
+        }
+        index = index * 10 + static_cast<u32>(c - '0');
+      }
+      if (!digits) {
+        return ir::OperandIdx(base::INVALID_IDX);
+      }
+    } else if (!ctx.resolve_field_index(base_type, field.name.name, index)) {
+      return ir::OperandIdx(base::INVALID_IDX);
+    }
+    const ir::TypeTag tag = emitter.builder().state().types[base_type].tag;
+    if (tag == ir::TypeTag::Struct) {
+      const ir::StructType& shape =
+          emitter.builder().state().struct_types
+              [emitter.builder().state().types[base_type].as_struct()];
+      if (index < shape.fields.size()) {
+        field_type = shape.fields[index];
+      }
+    } else if (tag == ir::TypeTag::Tuple) {
+      const ir::TupleType& shape =
+          emitter.builder().state().tuple_types
+              [emitter.builder().state().types[base_type].as_tuple()];
+      if (index < shape.elements.size()) {
+        field_type = shape.elements[index];
+      }
+    }
+  } else {
+    const ast::ExprIndex& access = node.payload.get<ast::ExprIndex>();
+    const ir::OperandIdx position = emit_expr(
+        ast, access.index, ctx.expr_type(access.index), emitter, ctx, params);
+    u64 value = 0;
+    if (!position.is_valid() || !operand_int(emitter, position, value)) {
+      return ir::OperandIdx(base::INVALID_IDX);
+    }
+    index = static_cast<u32>(value);
+    if (emitter.builder().state().types[base_type].tag == ir::TypeTag::Array) {
+      field_type =
+          emitter.builder()
+              .state()
+              .array_types
+                  [emitter.builder().state().types[base_type].as_array()]
+              .element;
+    }
+  }
+  if (!field_type.is_valid()) {
+    return ir::OperandIdx(base::INVALID_IDX);
+  }
+  const ir::TypeIdx i32_ty = emitter.builder().primitive(ir::TypeTag::I32);
+  ir::OperandSeq ops;
+  ops.push(emitter.builder().operand(
+      ir::Operand{emitter.builder().state().operands[base.idx]}));
+  ops.push(emitter.builder().operand(ir::Operand::from_immutable(
+      emitter.builder().immutable({.type = i32_ty, .data = {.i32_value = 0}}),
+      i32_ty)));
+  ops.push(emitter.builder().operand(ir::Operand::from_immutable(
+      emitter.builder().immutable(
+          {.type = i32_ty, .data = {.i32_value = static_cast<i32>(index)}}),
+      i32_ty)));
+  const ir::RegisterIdx dst(emitter.builder().state().registers.size());
+  const ir::InstructionIdx instr =
+      emitter.builder().instr({.op = ir::Opcode::GetElementPtr,
+                               .flags = {},
+                               .dst = dst,
+                               .measure = field_type,
+                               .operands = ops.finish()});
+  const ir::TypeIdx ref = emitter.builder().reference_type(field_type, true);
+  emitter.builder().reg({.type = ref, .def_idx = instr});
+  emitter.cur().push(instr);
+  return emitter.builder().operand(ir::Operand::from_register(dst, ref));
+}
+
 // Emits a block's statements and trailing value into `emitter`.
 ir::OperandIdx emit_block(const ast::AstArena& ast,
                           const ast::Block& block,
@@ -626,13 +770,6 @@ ir::OperandIdx emit_block(const ast::AstArena& ast,
       const std::string_view local_name = pat.kind == ast::PatternKind::Ident
                                               ? pat.payload.ident.name.name
                                               : pat.payload.mut_ident.name.name;
-      // Aggregate values stay in the semantic side table; storing them
-      // through an alloca would ask the interpreter for an aggregate
-      // store it does not carry. Bind them by value instead.
-      if (emitter.get_semantic(init) != nullptr) {
-        emitter.bind_value(local_name, init);
-        continue;
-      }
       const ir::TypeIdx ref_type =
           emitter.builder().reference_type(binding_type, true);
       const ir::RegisterIdx addr(emitter.builder().state().registers.size());
@@ -651,26 +788,22 @@ ir::OperandIdx emit_block(const ast::AstArena& ast,
                                    .measure = binding_type,
                                    .operands = store_ops.finish()}));
       std::optional<comp::CompVal> init_value;
-      if (const comp::CompVal* sem = emitter.get_semantic(init)) {
-        init_value = *sem;
-      } else {
-        const ir::Operand& op = emitter.builder().state().operands[init.idx];
-        if (op.is<ir::ImmutableIdx>()) {
-          const ir::TypeTag tag =
-              emitter.builder().state().types[binding_type].tag;
-          const u64 bits = emitter.builder()
-                               .state()
-                               .immutables[op.as_immutable()]
-                               .data.u64_value &
-                           comp::mask(tag);
-          comp::CompVal value;
-          value.type = binding_type;
-          value.value.tag = tag == ir::TypeTag::I1 ? comp::CompValue::Tag::Bool
-                                                   : comp::CompValue::Tag::Int;
-          value.value.int_value = bits;
-          value.value.bool_value = bits != 0;
-          init_value = std::move(value);
-        }
+      const ir::Operand& op = emitter.builder().state().operands[init.idx];
+      if (op.is<ir::ImmutableIdx>()) {
+        const ir::TypeTag tag =
+            emitter.builder().state().types[binding_type].tag;
+        const u64 bits = emitter.builder()
+                             .state()
+                             .immutables[op.as_immutable()]
+                             .data.u64_value &
+                         comp::mask(tag);
+        comp::CompVal value;
+        value.type = binding_type;
+        value.value.tag = tag == ir::TypeTag::I1 ? comp::CompValue::Tag::Bool
+                                                 : comp::CompValue::Tag::Int;
+        value.value.int_value = bits;
+        value.value.bool_value = bits != 0;
+        init_value = std::move(value);
       }
       emitter.bind_local(
           local_name,
@@ -774,6 +907,68 @@ ir::OperandIdx emit_block(const ast::AstArena& ast,
             continue;
           }
         }
+      }
+      if (place_node.kind == ast::ExprKind::Field ||
+          place_node.kind == ast::ExprKind::Index) {
+        const ir::OperandIdx address =
+            emit_place_address(ast, reassign.place, emitter, ctx, params);
+        if (!address.is_valid()) {
+          emitter.restore_locals(saved_locals);
+          return ir::OperandIdx(base::INVALID_IDX);
+        }
+        const ir::TypeIdx field_type =
+            emitter.builder().state().operands[address.idx].type;
+        const ir::TypeIdx pointee =
+            emitter.builder()
+                .state()
+                .ref_types[emitter.builder().state().types[field_type].as_ref()]
+                .pointee;
+        ir::OperandIdx stored =
+            emit_expr(ast, reassign.value, pointee, emitter, ctx, params);
+        if (!stored.is_valid()) {
+          emitter.restore_locals(saved_locals);
+          return ir::OperandIdx(base::INVALID_IDX);
+        }
+        if (reassign.compound) {
+          const ir::RegisterIdx loaded(
+              emitter.builder().state().registers.size());
+          const ir::InstructionIdx load = emitter.builder().instr(
+              {.op = ir::Opcode::Load,
+               .flags = {},
+               .dst = loaded,
+               .measure = pointee,
+               .operands = ir::OperandIdxRange{address, 1}});
+          emitter.builder().reg({.type = pointee, .def_idx = load});
+          emitter.cur().push(load);
+          ir::OperandSeq ops;
+          ops.push(emitter.builder().operand(
+              ir::Operand::from_register(loaded, pointee)));
+          ops.push(emitter.builder().operand(
+              ir::Operand{emitter.builder().state().operands[stored.idx]}));
+          const ir::RegisterIdx dst(emitter.builder().state().registers.size());
+          const ir::InstructionIdx add =
+              emitter.builder().instr({.op = ir::Opcode::IntAdd,
+                                       .flags = {},
+                                       .dst = dst,
+                                       .measure = pointee,
+                                       .operands = ops.finish()});
+          emitter.builder().reg({.type = pointee, .def_idx = add});
+          emitter.cur().push(add);
+          stored = emitter.builder().operand(
+              ir::Operand::from_register(dst, pointee));
+        }
+        ir::OperandSeq store_ops;
+        store_ops.push(emitter.builder().operand(
+            ir::Operand{emitter.builder().state().operands[stored.idx]}));
+        store_ops.push(emitter.builder().operand(
+            ir::Operand{emitter.builder().state().operands[address.idx]}));
+        emitter.cur().push(
+            emitter.builder().instr({.op = ir::Opcode::Store,
+                                     .flags = {},
+                                     .dst = ir::RegisterIdx(base::INVALID_IDX),
+                                     .measure = pointee,
+                                     .operands = store_ops.finish()}));
+        continue;
       }
       if (place_node.kind != ast::ExprKind::Path) {
         emitter.restore_locals(saved_locals);
@@ -1391,6 +1586,21 @@ ir::OperandIdx emit_str_intrinsic(const ast::AstArena& ast,
       return ir::OperandIdx(base::INVALID_IDX);
     }
     const comp::CompVal* const src = emitter.get_semantic(receiver);
+    if (src == nullptr && cname == "str_len") {
+      ir::OperandSeq len_ops;
+      len_ops.push(emitter.builder().operand(
+          ir::Operand{emitter.builder().state().operands[receiver.idx]}));
+      const ir::RegisterIdx dst(emitter.builder().state().registers.size());
+      const ir::InstructionIdx instr =
+          emitter.builder().instr({.op = ir::Opcode::CompStrLen,
+                                   .flags = {},
+                                   .dst = dst,
+                                   .measure = ir::TypeIdx::invalid(),
+                                   .operands = len_ops.finish()});
+      emitter.builder().reg({.type = type, .def_idx = instr});
+      emitter.cur().push(instr);
+      return emitter.builder().operand(ir::Operand::from_register(dst, type));
+    }
     if (src == nullptr || src->value.tag != comp::CompValue::Tag::Str) {
       return ir::OperandIdx(base::INVALID_IDX);
     }
@@ -1676,6 +1886,7 @@ ir::OperandIdx emit_comp_for(const ast::AstArena& ast,
     return ir::OperandIdx(base::INVALID_IDX);
   }
   const bool from_range = ast.exprs[head].kind == ast::ExprKind::Range;
+  ir::OperandIdx array_op = ir::OperandIdx(base::INVALID_IDX);
   std::vector<comp::CompVal> elements;
   if (ast.exprs[head].kind == ast::ExprKind::Range) {
     const ast::ExprRange& range = ast.exprs[head].payload.get<ast::ExprRange>();
@@ -1732,12 +1943,11 @@ ir::OperandIdx emit_comp_for(const ast::AstArena& ast,
       return ir::OperandIdx(base::INVALID_IDX);
     }
     const ir::TypeIdx head_type = expr_type(head);
-    const ir::OperandIdx head_op =
-        emit_expr(ast, head, head_type, emitter, ctx, params);
-    if (!head_op.is_valid()) {
+    array_op = emit_expr(ast, head, head_type, emitter, ctx, params);
+    if (!array_op.is_valid()) {
       return ir::OperandIdx(base::INVALID_IDX);
     }
-    const comp::CompVal* seq = emitter.get_semantic(head_op);
+    const comp::CompVal* seq = emitter.get_semantic(array_op);
     if (seq == nullptr || seq->value.tag != comp::CompValue::Tag::Array) {
       return ir::OperandIdx(base::INVALID_IDX);
     }
@@ -1802,58 +2012,106 @@ ir::OperandIdx emit_comp_for(const ast::AstArena& ast,
 
   const u64 iterations = elements.size();
   if (!from_range) {
-    std::vector<ir::BlockIdx> iter_blocks;
-    iter_blocks.reserve(static_cast<usize>(iterations));
-    for (u64 i = 0; i < iterations; ++i) {
-      iter_blocks.push_back(emitter.new_block());
-    }
+    // An array loop reads its element at runtime through the side table,
+    // so the body can sit behind a back edge like a range loop.
+    const ir::TypeIdx usize_ty =
+        emitter.builder().primitive(ir::TypeTag::Usize);
+    const ir::TypeIdx element_ty = elements[0].type;
+    const ir::BlockIdx header = emitter.new_block();
+    const ir::BlockIdx step_b = emitter.new_block();
+    const ir::BlockIdx body_b = emitter.new_block();
     const ir::BlockIdx exit_b = emitter.new_block();
+    const ir::RegisterIdx idx_reg = emitter.claim_reg(usize_ty);
+    emitter.set_block_params(header, emitter.block_param(usize_ty, idx_reg));
+    const ir::OperandIdx zero =
+        emitter.builder().operand(ir::Operand::from_immutable(
+            emitter.builder().immutable(
+                {.type = usize_ty, .data = {.u64_value = 0}}),
+            usize_ty));
     if (!emitter.terminated()) {
-      emitter.emit_br(iter_blocks[0], ir::OperandIdx(base::INVALID_IDX));
+      emitter.emit_br(header, zero);
     }
-    emitter.set_loop_targets(exit_b, exit_b);
-    const usize saved_bindings = emitter.value_bindings_size();
-    bool ok = true;
-    for (u64 i = 0; i < iterations; ++i) {
-      emitter.set_cur(iter_blocks[static_cast<usize>(i)]);
-      const comp::CompVal& element = elements[static_cast<usize>(i)];
-      ir::OperandIdx element_op = ir::OperandIdx(base::INVALID_IDX);
-      if (element.value.tag == comp::CompValue::Tag::Int ||
-          element.value.tag == comp::CompValue::Tag::Bool) {
-        const ir::TypeTag tag =
-            emitter.builder().state().types[element.type].tag;
-        const ir::ImmutableIdx imm = emitter.builder().immutable(
-            {.type = element.type,
-             .data = {.u64_value =
-                          (element.value.tag == comp::CompValue::Tag::Bool
-                               ? (element.value.bool_value ? 1u : 0u)
-                               : element.value.int_value) &
-                          comp::mask(tag)}});
-        element_op = emitter.builder().operand(
-            ir::Operand::from_immutable(imm, element.type));
-      } else {
-        element_op = emitter.add_semantic(element, element.type);
-      }
-      if (bind_element) {
-        emitter.bind_value(var_name, element_op);
-      }
-      const ir::OperandIdx body_val = emit_block(
-          ast, body_block, emitter.builder().primitive(ir::TypeTag::Void),
-          emitter, ctx, params);
-      emitter.restore_value_bindings(saved_bindings);
-      if (!body_val.is_valid()) {
-        ok = false;
-        break;
-      }
-      if (!emitter.terminated()) {
-        const ir::BlockIdx next = i + 1 < iterations
-                                      ? iter_blocks[static_cast<usize>(i + 1)]
-                                      : exit_b;
-        emitter.emit_br(next, ir::OperandIdx(base::INVALID_IDX));
-      }
+    emitter.set_cur(header);
+    const ir::OperandIdx current = emitter.builder().operand(
+        ir::Operand::from_register(idx_reg, usize_ty));
+    const ir::OperandIdx limit =
+        emitter.builder().operand(ir::Operand::from_immutable(
+            emitter.builder().immutable(
+                {.type = usize_ty, .data = {.u64_value = iterations}}),
+            usize_ty));
+    ir::OperandSeq cmp_ops;
+    cmp_ops.push(current);
+    cmp_ops.push(limit);
+    const ir::RegisterIdx cond_reg =
+        emitter.claim_reg(emitter.builder().primitive(ir::TypeTag::I1));
+    const ir::InstructionIdx cmp =
+        emitter.builder().instr({.op = ir::Opcode::Lt,
+                                 .flags = {},
+                                 .dst = cond_reg,
+                                 .measure = ir::TypeIdx::invalid(),
+                                 .operands = cmp_ops.finish()});
+    emitter.builder().reg(
+        {.type = emitter.builder().primitive(ir::TypeTag::I1), .def_idx = cmp});
+    emitter.cur().push(cmp);
+    emitter.emit_cond_br(
+        emitter.builder().operand(ir::Operand::from_register(
+            cond_reg, emitter.builder().primitive(ir::TypeTag::I1))),
+        body_b, exit_b);
+
+    emitter.set_loop_targets(exit_b, step_b);
+    emitter.set_cur(body_b);
+    ir::OperandSeq index_ops;
+    index_ops.push(emitter.builder().operand(
+        ir::Operand{emitter.builder().state().operands[array_op.idx]}));
+    index_ops.push(emitter.builder().operand(
+        ir::Operand::from_register(idx_reg, usize_ty)));
+    const ir::RegisterIdx element_reg = emitter.claim_reg(element_ty);
+    const ir::InstructionIdx element_instr =
+        emitter.builder().instr({.op = ir::Opcode::CompArrayIndex,
+                                 .flags = {},
+                                 .dst = element_reg,
+                                 .measure = element_ty,
+                                 .operands = index_ops.finish()});
+    emitter.builder().reg({.type = element_ty, .def_idx = element_instr});
+    emitter.cur().push(element_instr);
+    const ir::OperandIdx element_op = emitter.builder().operand(
+        ir::Operand::from_register(element_reg, element_ty));
+    emitter.clear_semantic(element_op);
+    if (bind_element) {
+      emitter.bind_value(var_name, element_op);
     }
+    const ir::OperandIdx body_val = emit_block(
+        ast, body_block, emitter.builder().primitive(ir::TypeTag::Void),
+        emitter, ctx, params);
+    const bool body_ok = body_val.is_valid();
+    if (body_ok && !emitter.terminated()) {
+      emitter.emit_br(step_b, ir::OperandIdx(base::INVALID_IDX));
+    }
+    emitter.set_cur(step_b);
+    const ir::OperandIdx step_current = emitter.builder().operand(
+        ir::Operand::from_register(idx_reg, usize_ty));
+    const ir::OperandIdx one =
+        emitter.builder().operand(ir::Operand::from_immutable(
+            emitter.builder().immutable(
+                {.type = usize_ty, .data = {.u64_value = 1}}),
+            usize_ty));
+    ir::OperandSeq add_ops;
+    add_ops.push(step_current);
+    add_ops.push(one);
+    const ir::RegisterIdx next_reg = emitter.claim_reg(usize_ty);
+    const ir::InstructionIdx add =
+        emitter.builder().instr({.op = ir::Opcode::IntAdd,
+                                 .flags = {},
+                                 .dst = next_reg,
+                                 .measure = usize_ty,
+                                 .operands = add_ops.finish()});
+    emitter.builder().reg({.type = usize_ty, .def_idx = add});
+    emitter.cur().push(add);
+    emitter.emit_br(header,
+                    emitter.builder().operand(
+                        ir::Operand::from_register(next_reg, usize_ty)));
     emitter.clear_loop_targets();
-    if (!ok) {
+    if (!body_ok) {
       return ir::OperandIdx(base::INVALID_IDX);
     }
     emitter.set_cur(exit_b);
@@ -2159,8 +2417,21 @@ static ir::OperandIdx emit_comp_inline(const ast::AstArena& ast,
   const usize fixed_count =
       info.variadic ? info.params.size() - 1 : info.params.size();
   for (usize i = 0; i < args.size(); ++i) {
-    const ir::OperandIdx arg =
-        emit_expr(ast, args[i], expr_type(args[i]), emitter, ctx, params);
+    ir::OperandIdx arg = ir::OperandIdx(base::INVALID_IDX);
+    if (i == 0 && info.is_method &&
+        ast.exprs[args[i]].kind == ast::ExprKind::Path) {
+      const auto& segs =
+          ast.paths[ast.exprs[args[i]].payload.get<ast::ExprPath>().idx]
+              .segments;
+      if (segs.size() == 1) {
+        if (const LocalBinding* local = emitter.lookup_local(segs[0].name)) {
+          arg = local->addr;
+        }
+      }
+    }
+    if (!arg.is_valid()) {
+      arg = emit_expr(ast, args[i], expr_type(args[i]), emitter, ctx, params);
+    }
     if (!arg.is_valid()) {
       emitter.leave_inline();
       return ir::OperandIdx(base::INVALID_IDX);
@@ -2215,8 +2486,12 @@ static ir::OperandIdx emit_comp_inline(const ast::AstArena& ast,
   }
   emitter.set_cur(callee_return);
   emitter.leave_inline();
-  return emitter.builder().operand(
+  const ir::OperandIdx result = emitter.builder().operand(
       ir::Operand::from_register(callee_result, info.ret));
+  if (emitter.builder().state().types[info.ret].tag == ir::TypeTag::Enum) {
+    emitter.clear_semantic(result);
+  }
+  return result;
 }
 
 static ir::OperandIdx emit_return_expr(const ast::AstArena& ast,
@@ -2354,10 +2629,8 @@ static ir::OperandIdx emit_call_expr(const ast::AstArena& ast,
       if (emitter.builder().state().types[type].tag == ir::TypeTag::Enum) {
         u32 variant = 0;
         if (emitter.resolve_variant_index(type, cname, variant)) {
-          comp::CompVal built;
-          built.type = type;
-          built.value.tag = comp::CompValue::Tag::Enum;
-          built.value.variant = variant;
+          std::vector<ir::OperandIdx> arg_ops;
+          bool runtime_fields = false;
           for (ast::ExprIdx arg : call.args) {
             const ir::TypeIdx arg_ty = expr_type(arg);
             const ir::OperandIdx arg_op =
@@ -2365,6 +2638,47 @@ static ir::OperandIdx emit_call_expr(const ast::AstArena& ast,
             if (!arg_op.is_valid()) {
               return ir::OperandIdx(base::INVALID_IDX);
             }
+            arg_ops.push_back(arg_op);
+            if (emitter.get_semantic(arg_op) == nullptr) {
+              u64 bits = 0;
+              if (!operand_int(emitter, arg_op, bits)) {
+                runtime_fields = true;
+              }
+            }
+          }
+          if (runtime_fields) {
+            const ir::TypeIdx usize_ty =
+                emitter.builder().primitive(ir::TypeTag::Usize);
+            const ir::OperandIdx tag =
+                emitter.builder().operand(ir::Operand::from_immutable(
+                    emitter.builder().immutable(
+                        {.type = usize_ty, .data = {.u64_value = variant}}),
+                    usize_ty));
+            ir::OperandSeq ops;
+            ops.push(emitter.builder().operand(
+                ir::Operand{emitter.builder().state().operands[tag.idx]}));
+            for (ir::OperandIdx op : arg_ops) {
+              ops.push(emitter.builder().operand(
+                  ir::Operand{emitter.builder().state().operands[op.idx]}));
+            }
+            const ir::RegisterIdx dst(
+                emitter.builder().state().registers.size());
+            const ir::InstructionIdx instr =
+                emitter.builder().instr({.op = ir::Opcode::CompMakeVariant,
+                                         .flags = {},
+                                         .dst = dst,
+                                         .measure = ir::TypeIdx::invalid(),
+                                         .operands = ops.finish()});
+            emitter.builder().reg({.type = type, .def_idx = instr});
+            emitter.cur().push(instr);
+            return emitter.builder().operand(
+                ir::Operand::from_register(dst, type));
+          }
+          comp::CompVal built;
+          built.type = type;
+          built.value.tag = comp::CompValue::Tag::Enum;
+          built.value.variant = variant;
+          for (ir::OperandIdx arg_op : arg_ops) {
             comp::CompValue field;
             if (const comp::CompVal* sem = emitter.get_semantic(arg_op)) {
               field = sem->value;
@@ -2373,6 +2687,8 @@ static ir::OperandIdx emit_call_expr(const ast::AstArena& ast,
               if (!operand_int(emitter, arg_op, bits)) {
                 return ir::OperandIdx(base::INVALID_IDX);
               }
+              const ir::TypeIdx arg_ty =
+                  emitter.builder().state().operands[arg_op.idx].type;
               field.tag =
                   emitter.builder().state().types[arg_ty].tag == ir::TypeTag::I1
                       ? comp::CompValue::Tag::Bool
@@ -3071,10 +3387,52 @@ static ir::OperandIdx emit_field_expr(const ast::AstArena& ast,
   } else {
     return ir::OperandIdx(base::INVALID_IDX);
   }
-  const ir::OperandIdx base =
-      emit_expr(ast, field.receiver, receiver_type, emitter, ctx, params);
+  bool base_is_address = false;
+  ir::OperandIdx base = ir::OperandIdx(base::INVALID_IDX);
+  if (ast.exprs[field.receiver].kind == ast::ExprKind::Path ||
+      ast.exprs[field.receiver].kind == ast::ExprKind::Field ||
+      ast.exprs[field.receiver].kind == ast::ExprKind::Index) {
+    const auto& segs =
+        ast.paths[ast.exprs[field.receiver].payload.get<ast::ExprPath>().idx]
+            .segments;
+    if (segs.size() == 1) {
+      base = emit_place_address(ast, field.receiver, emitter, ctx, params);
+      base_is_address = base.is_valid();
+      if (!base.is_valid()) {
+        base =
+            emit_expr(ast, field.receiver, receiver_type, emitter, ctx, params);
+      }
+    }
+  }
+  if (!base.is_valid()) {
+    base = emit_expr(ast, field.receiver, receiver_type, emitter, ctx, params);
+  }
   if (!base.is_valid()) {
     return ir::OperandIdx(base::INVALID_IDX);
+  }
+  if (!base_is_address && emitter.get_semantic(base) == nullptr) {
+    const ir::TypeIdx usize_ty =
+        emitter.builder().primitive(ir::TypeTag::Usize);
+    const ir::ImmutableIdx index_imm = emitter.builder().immutable(
+        {.type = usize_ty, .data = {.u64_value = index}});
+    ir::OperandSeq field_ops;
+    field_ops.push(emitter.builder().operand(
+        ir::Operand{emitter.builder().state().operands[base.idx]}));
+    field_ops.push(emitter.builder().operand(
+        ir::Operand::from_immutable(index_imm, usize_ty)));
+    const ir::RegisterIdx dst(emitter.builder().state().registers.size());
+    const ir::InstructionIdx instr =
+        emitter.builder().instr({.op = ir::Opcode::CompField,
+                                 .flags = {},
+                                 .dst = dst,
+                                 .measure = type,
+                                 .operands = field_ops.finish()});
+    emitter.builder().reg({.type = type, .def_idx = instr});
+    emitter.cur().push(instr);
+    const ir::OperandIdx result =
+        emitter.builder().operand(ir::Operand::from_register(dst, type));
+    emitter.clear_semantic(result);
+    return result;
   }
   if (const comp::CompVal* sem = emitter.get_semantic(base)) {
     if ((sem->value.tag == comp::CompValue::Tag::Struct ||
@@ -3142,8 +3500,16 @@ static ir::OperandIdx emit_index_expr(const ast::AstArena& ast,
       ctx.resolve_field_index;
   const ast::ExprIndex& index_expr = node.payload.get<ast::ExprIndex>();
   const ir::TypeIdx receiver_type = expr_type(index_expr.receiver);
-  const ir::OperandIdx base =
-      emit_expr(ast, index_expr.receiver, receiver_type, emitter, ctx, params);
+  ir::OperandIdx base = ir::OperandIdx(base::INVALID_IDX);
+  if (ast.exprs[index_expr.receiver].kind == ast::ExprKind::Path ||
+      ast.exprs[index_expr.receiver].kind == ast::ExprKind::Field ||
+      ast.exprs[index_expr.receiver].kind == ast::ExprKind::Index) {
+    base = emit_place_address(ast, index_expr.receiver, emitter, ctx, params);
+  }
+  if (!base.is_valid()) {
+    base = emit_expr(ast, index_expr.receiver, receiver_type, emitter, ctx,
+                     params);
+  }
   if (!base.is_valid()) {
     return ir::OperandIdx(base::INVALID_IDX);
   }
@@ -3508,6 +3874,167 @@ static ir::OperandIdx emit_while_expr(const ast::AstArena& ast,
   return emitter.void_operand();
 }
 
+// A loop body is emitted once and re-executed over IR back edges, so a
+// variant folded at emission would never change. Read the tag and payload
+// through semantic opcodes instead.
+static ir::OperandIdx emit_runtime_enum_match(const ast::AstArena& ast,
+                                              const ast::ExprMatch& match_node,
+                                              ir::TypeIdx scrutinee_type,
+                                              ir::OperandIdx scrutinee,
+                                              ir::TypeIdx type,
+                                              ConstEmitter& emitter,
+                                              const EmitContext& ctx,
+                                              const ParamEnv* params) {
+  std::vector<u32> variants;
+  for (const ast::ExprMatchArm& arm : match_node.arms) {
+    const ast::PatternNode& pat = ast.patterns[arm.pattern];
+    if (arm.guard.is_valid()) {
+      return ir::OperandIdx(base::INVALID_IDX);
+    }
+    if (pat.kind == ast::PatternKind::Wildcard) {
+      variants.push_back(U32_MAX);
+      continue;
+    }
+    if (pat.kind != ast::PatternKind::Tuple ||
+        !pat.payload.tuple.path.is_valid()) {
+      return ir::OperandIdx(base::INVALID_IDX);
+    }
+    for (ast::PatternIdx element : pat.payload.tuple.elements) {
+      const ast::PatternKind kind = ast.patterns[element].kind;
+      if (kind != ast::PatternKind::Ident &&
+          kind != ast::PatternKind::MutIdent) {
+        return ir::OperandIdx(base::INVALID_IDX);
+      }
+    }
+    const std::string_view name =
+        ast.paths[pat.payload.tuple.path].segments.back().name;
+    u32 variant = 0;
+    if (!emitter.resolve_variant_index(scrutinee_type, name, variant)) {
+      return ir::OperandIdx(base::INVALID_IDX);
+    }
+    variants.push_back(variant);
+  }
+
+  const ir::TypeIdx usize_ty = emitter.builder().primitive(ir::TypeTag::Usize);
+  ir::OperandSeq tag_ops;
+  tag_ops.push(emitter.builder().operand(
+      ir::Operand{emitter.builder().state().operands[scrutinee.idx]}));
+  const ir::RegisterIdx tag_reg(emitter.builder().state().registers.size());
+  const ir::InstructionIdx tag_instr =
+      emitter.builder().instr({.op = ir::Opcode::CompVariantTag,
+                               .flags = {},
+                               .dst = tag_reg,
+                               .measure = ir::TypeIdx::invalid(),
+                               .operands = tag_ops.finish()});
+  emitter.builder().reg({.type = usize_ty, .def_idx = tag_instr});
+  emitter.cur().push(tag_instr);
+  const ir::OperandIdx tag_op =
+      emitter.builder().operand(ir::Operand::from_register(tag_reg, usize_ty));
+
+  std::vector<ir::BlockIdx> test_blocks;
+  std::vector<ir::BlockIdx> body_blocks;
+  for (usize i = 0; i < match_node.arms.size(); ++i) {
+    test_blocks.push_back(emitter.new_block());
+    body_blocks.push_back(emitter.new_block());
+  }
+  const ir::BlockIdx merge_b = emitter.new_block();
+  const ir::RegisterIdx result_reg = emitter.claim_reg(type);
+  emitter.set_block_params(merge_b, emitter.block_param(type, result_reg));
+  emitter.emit_br(test_blocks[0], ir::OperandIdx(base::INVALID_IDX));
+
+  for (usize i = 0; i < match_node.arms.size(); ++i) {
+    const ast::ExprMatchArm& arm = match_node.arms[i];
+    emitter.set_cur(test_blocks[i]);
+    if (variants[i] != U32_MAX) {
+      const ir::ImmutableIdx imm = emitter.builder().immutable(
+          {.type = usize_ty, .data = {.u64_value = variants[i]}});
+      const ir::OperandIdx pat_op =
+          emitter.builder().operand(ir::Operand::from_immutable(imm, usize_ty));
+      ir::OperandSeq cmp_ops;
+      cmp_ops.push(emitter.builder().operand(
+          ir::Operand{emitter.builder().state().operands[tag_op.idx]}));
+      cmp_ops.push(emitter.builder().operand(
+          ir::Operand{emitter.builder().state().operands[pat_op.idx]}));
+      const ir::RegisterIdx cmp_dst(emitter.builder().state().registers.size());
+      const ir::InstructionIdx cmp_instr =
+          emitter.builder().instr({.op = ir::Opcode::Eq,
+                                   .flags = {},
+                                   .dst = cmp_dst,
+                                   .measure = ir::TypeIdx::invalid(),
+                                   .operands = cmp_ops.finish()});
+      emitter.builder().reg(
+          {.type = emitter.builder().primitive(ir::TypeTag::I1),
+           .def_idx = cmp_instr});
+      emitter.cur().push(cmp_instr);
+      const ir::OperandIdx cmp_op =
+          emitter.builder().operand(ir::Operand::from_register(
+              cmp_dst, emitter.builder().primitive(ir::TypeTag::I1)));
+      const ir::BlockIdx false_target = i + 1 < match_node.arms.size()
+                                            ? test_blocks[i + 1]
+                                            : body_blocks.back();
+      emitter.emit_cond_br(cmp_op, body_blocks[i], false_target);
+    } else {
+      emitter.emit_br(body_blocks[i], ir::OperandIdx(base::INVALID_IDX));
+    }
+
+    emitter.set_cur(body_blocks[i]);
+    const ast::PatternNode& pat = ast.patterns[arm.pattern];
+    const usize saved = emitter.value_bindings_size();
+    if (pat.kind == ast::PatternKind::Tuple &&
+        pat.payload.tuple.path.is_valid()) {
+      const ir::EnumType& shape =
+          emitter.builder().state().enum_types
+              [emitter.builder().state().types[scrutinee_type].as_enum()];
+      const ir::EnumVariantTypeIdx vidx(shape.variants.head().idx +
+                                        variants[i]);
+      const ir::EnumVariantType& vshape =
+          emitter.builder().state().enum_variant_types[vidx];
+      for (usize field = 0; field < pat.payload.tuple.elements.size();
+           ++field) {
+        const ast::PatternNode& element =
+            ast.patterns[pat.payload.tuple.elements[field]];
+        const ir::TypeIdx field_type = field < vshape.fields.size()
+                                           ? vshape.fields[field]
+                                           : ir::TypeIdx(base::INVALID_IDX);
+        const ir::ImmutableIdx index = emitter.builder().immutable(
+            {.type = usize_ty, .data = {.u64_value = field}});
+        ir::OperandSeq field_ops;
+        field_ops.push(emitter.builder().operand(
+            ir::Operand{emitter.builder().state().operands[scrutinee.idx]}));
+        field_ops.push(emitter.builder().operand(
+            ir::Operand::from_immutable(index, usize_ty)));
+        const ir::RegisterIdx dst(emitter.builder().state().registers.size());
+        const ir::InstructionIdx instr =
+            emitter.builder().instr({.op = ir::Opcode::CompField,
+                                     .flags = {},
+                                     .dst = dst,
+                                     .measure = field_type,
+                                     .operands = field_ops.finish()});
+        emitter.builder().reg({.type = field_type, .def_idx = instr});
+        emitter.cur().push(instr);
+        const std::string_view name = element.kind == ast::PatternKind::Ident
+                                          ? element.payload.ident.name.name
+                                          : element.payload.mut_ident.name.name;
+        emitter.bind_value(name,
+                           emitter.builder().operand(
+                               ir::Operand::from_register(dst, field_type)));
+      }
+    }
+    const ir::OperandIdx val =
+        emit_expr(ast, arm.body, type, emitter, ctx, params);
+    emitter.restore_value_bindings(saved);
+    if (!val.is_valid()) {
+      return ir::OperandIdx(base::INVALID_IDX);
+    }
+    if (!emitter.terminated()) {
+      emitter.emit_br(merge_b, val);
+    }
+  }
+  emitter.set_cur(merge_b);
+  return emitter.builder().operand(
+      ir::Operand::from_register(result_reg, type));
+}
+
 static ir::OperandIdx emit_match_expr(const ast::AstArena& ast,
                                       [[maybe_unused]] ast::ExprIdx expr,
                                       ir::TypeIdx type,
@@ -3533,6 +4060,15 @@ static ir::OperandIdx emit_match_expr(const ast::AstArena& ast,
       ast, match_node.scrutinee, scrutinee_type, emitter, ctx, params);
   if (!scrutinee.is_valid()) {
     return ir::OperandIdx(base::INVALID_IDX);
+  }
+  if (emitter.get_semantic(scrutinee) == nullptr &&
+      emitter.builder().state().types[scrutinee_type].tag ==
+          ir::TypeTag::Enum) {
+    const ir::OperandIdx dispatched = emit_runtime_enum_match(
+        ast, match_node, scrutinee_type, scrutinee, type, emitter, ctx, params);
+    if (dispatched.is_valid()) {
+      return dispatched;
+    }
   }
   // A fully compile-time scrutinee resolves to one arm without IR
   // control flow. This is how semantic enums (e.g. `byte_slice`'s
@@ -3731,7 +4267,17 @@ static ir::OperandIdx emit_method_call_expr(const ast::AstArena& ast,
       emit_comp_inline(ast, expr, method_args, emitter, ctx, params);
   // A `mut self` method may have updated the receiver through its
   // `self` binding; write the new value back to a named receiver.
+  bool receiver_is_address = false;
   if (method.receiver.is_valid() &&
+      ast.exprs[method.receiver].kind == ast::ExprKind::Path) {
+    const auto& segs =
+        ast.paths[ast.exprs[method.receiver].payload.get<ast::ExprPath>().idx]
+            .segments;
+    if (segs.size() == 1 && emitter.lookup_local(segs[0].name) != nullptr) {
+      receiver_is_address = true;
+    }
+  }
+  if (!receiver_is_address && method.receiver.is_valid() &&
       ast.exprs[method.receiver].kind == ast::ExprKind::Path) {
     const ir::OperandIdx updated = emitter.lookup_value("self");
     if (updated.is_valid()) {
@@ -3787,42 +4333,28 @@ static ir::OperandIdx emit_loop_expr(const ast::AstArena& ast,
   [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
       ctx.resolve_field_index;
   const ast::ExprLoop& loop_node = node.payload.get<ast::ExprLoop>();
-  const ast::BlockIdx body_idx = loop_node.body;
-  if (!body_idx.is_valid()) {
+  if (!loop_node.body.is_valid()) {
     return ir::OperandIdx(base::INVALID_IDX);
   }
-  // Const evaluation unrolls the loop: each pass re-emits the body
-  // with the current compile-time bindings, so a comp fn called in
-  // the body sees the values written by earlier passes.
+  const ir::BlockIdx header = emitter.new_block();
+  const ir::BlockIdx body_b = emitter.new_block();
   const ir::BlockIdx exit_b = emitter.new_block();
-  const usize saved_bindings = emitter.value_bindings_size();
-  bool completed = false;
-  for (usize i = 0; i < COMP_MAX_UNROLL; ++i) {
-    // An unrolled pass still spends one unit of the shared budget.
-    if (!emitter.spend_quota()) {
-      emitter.restore_value_bindings(saved_bindings);
-      return ir::OperandIdx(base::INVALID_IDX);
-    }
-    emitter.clear_broke();
-    emitter.reset_terminated();
-    emitter.set_loop_targets(exit_b, ir::BlockIdx(base::INVALID_IDX));
-    const ir::OperandIdx body_val = emit_block(
-        ast, ast.blocks[body_idx],
-        emitter.builder().primitive(ir::TypeTag::Void), emitter, ctx, params);
-    emitter.clear_loop_targets();
-    if (!body_val.is_valid()) {
-      emitter.restore_value_bindings(saved_bindings);
-      return ir::OperandIdx(base::INVALID_IDX);
-    }
-    if (emitter.terminated() || emitter.broke()) {
-      // A break leaves the loop; a return propagates to the caller.
-      completed = true;
-      break;
-    }
+  if (!emitter.terminated()) {
+    emitter.emit_br(header, ir::OperandIdx(base::INVALID_IDX));
   }
-  emitter.restore_value_bindings(saved_bindings);
-  if (!completed) {
-    emitter.set_emit_error(ConstEmitter::EmitError::ExpansionCap);
+  emitter.set_cur(header);
+  emitter.emit_br(body_b, ir::OperandIdx(base::INVALID_IDX));
+  emitter.set_loop_targets(exit_b, header);
+  emitter.set_cur(body_b);
+  const ir::TypeIdx void_ty = emitter.builder().primitive(ir::TypeTag::Void);
+  const ir::OperandIdx body_val = emit_block(ast, ast.blocks[loop_node.body],
+                                             void_ty, emitter, ctx, params);
+  const bool body_ok = body_val.is_valid();
+  if (body_ok && !emitter.terminated()) {
+    emitter.emit_br(header, ir::OperandIdx(base::INVALID_IDX));
+  }
+  emitter.clear_loop_targets();
+  if (!body_ok) {
     return ir::OperandIdx(base::INVALID_IDX);
   }
   emitter.set_cur(exit_b);
