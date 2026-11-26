@@ -2230,6 +2230,23 @@ bool semantic_pattern_matches(const ast::AstArena& ast,
       bind(name, op);
       return true;
     }
+    case ast::PatternKind::Name: {
+      const ast::PathIdx path = pat.payload.name.path;
+      if (value.value.tag != comp::CompValue::Tag::Enum) {
+        return false;
+      }
+      u32 variant = 0;
+      if (!emitter.resolve_variant_index(
+              value.type, ast.paths[path].segments.back().name, variant) ||
+          variant != value.value.variant) {
+        return false;
+      }
+      const ir::EnumType& shape =
+          emitter.builder().state().enum_types
+              [emitter.builder().state().types[value.type].as_enum()];
+      const ir::EnumVariantTypeIdx vidx(shape.variants.head().idx + variant);
+      return emitter.builder().state().enum_variant_types[vidx].fields.empty();
+    }
     case ast::PatternKind::Range: {
       if (value.value.tag != comp::CompValue::Tag::Int) {
         return false;
@@ -3678,19 +3695,22 @@ static ir::OperandIdx emit_runtime_enum_match(const ast::AstArena& ast,
       variants.push_back(U32_MAX);
       continue;
     }
-    if (pat.kind != ast::PatternKind::Tuple ||
-        !pat.payload.tuple.path.is_valid()) {
+    std::string_view name;
+    if (pat.kind == ast::PatternKind::Name) {
+      name = ast.paths[pat.payload.name.path].segments.back().name;
+    } else if (pat.kind == ast::PatternKind::Tuple &&
+               pat.payload.tuple.path.is_valid()) {
+      for (ast::PatternIdx element : pat.payload.tuple.elements) {
+        const ast::PatternKind kind = ast.patterns[element].kind;
+        if (kind != ast::PatternKind::Ident &&
+            kind != ast::PatternKind::MutIdent) {
+          return ir::OperandIdx(base::INVALID_IDX);
+        }
+      }
+      name = ast.paths[pat.payload.tuple.path].segments.back().name;
+    } else {
       return ir::OperandIdx(base::INVALID_IDX);
     }
-    for (ast::PatternIdx element : pat.payload.tuple.elements) {
-      const ast::PatternKind kind = ast.patterns[element].kind;
-      if (kind != ast::PatternKind::Ident &&
-          kind != ast::PatternKind::MutIdent) {
-        return ir::OperandIdx(base::INVALID_IDX);
-      }
-    }
-    const std::string_view name =
-        ast.paths[pat.payload.tuple.path].segments.back().name;
     u32 variant = 0;
     if (!emitter.resolve_variant_index(scrutinee_type, name, variant)) {
       return ir::OperandIdx(base::INVALID_IDX);

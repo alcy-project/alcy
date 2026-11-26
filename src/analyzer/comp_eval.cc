@@ -352,6 +352,11 @@ bool CompEval::comp_bind_pattern(u32 mod,
     case ast::PatternKind::Ident:
       scope.frames.back().emplace_back(node.payload.ident.name.name, value);
       return true;
+    case ast::PatternKind::Name: {
+      const ast::Path& path = ast.paths[node.payload.name.path];
+      scope.frames.back().emplace_back(path.segments.back().name, value);
+      return true;
+    }
     case ast::PatternKind::MutIdent:
       scope.frames.back().emplace_back(node.payload.mut_ident.name.name, value);
       return true;
@@ -422,6 +427,7 @@ bool CompEval::comp_match_pattern(u32 mod,
     case ast::PatternKind::Wildcard: return true;
     case ast::PatternKind::Ident:
     case ast::PatternKind::MutIdent:
+    case ast::PatternKind::Name:
       return comp_bind_pattern(mod, pattern, value, scope, span);
     case ast::PatternKind::Range: {
       if (value.value.tag != comp::CompValue::Tag::Int) {
