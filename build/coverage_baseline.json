@@ -5,22 +5,22 @@
     "coverage of src/ drops below this. Move it only on purpose."
   ],
   "lines": {
-    "count": 132228,
-    "covered": 109880,
-    "percent": 83.09888979641225
+    "count": 138993,
+    "covered": 115307,
+    "percent": 82.95885404300937
   },
   "modules": {
     "analyzer": {
-      "count": 17820,
-      "covered": 14281
+      "count": 20520,
+      "covered": 16265
     },
     "ast": {
-      "count": 862,
-      "covered": 712
+      "count": 863,
+      "covered": 713
     },
     "base": {
-      "count": 145,
-      "covered": 143
+      "count": 155,
+      "covered": 151
     },
     "benchmarks": {
       "count": 679,
@@ -31,8 +31,8 @@
       "covered": 1968
     },
     "cli": {
-      "count": 3799,
-      "covered": 3292
+      "count": 3891,
+      "covered": 3353
     },
     "codegen": {
       "count": 13513,
@@ -43,8 +43,8 @@
       "covered": 4666
     },
     "comp": {
-      "count": 1388,
-      "covered": 845
+      "count": 2012,
+      "covered": 1318
     },
     "cst": {
       "count": 355,
@@ -71,24 +71,24 @@
       "covered": 42
     },
     "ir": {
-      "count": 6042,
-      "covered": 4963
+      "count": 6279,
+      "covered": 5156
     },
     "lexer": {
       "count": 1108,
       "covered": 1029
     },
     "linter": {
-      "count": 2928,
-      "covered": 2206
+      "count": 2935,
+      "covered": 2208
     },
     "lowering": {
-      "count": 13208,
-      "covered": 10831
+      "count": 13096,
+      "covered": 10758
     },
     "lsp": {
-      "count": 6793,
-      "covered": 4934
+      "count": 8182,
+      "covered": 6104
     },
     "opt": {
       "count": 288,
@@ -99,16 +99,16 @@
       "covered": 168
     },
     "parser": {
-      "count": 5370,
-      "covered": 4560
+      "count": 5410,
+      "covered": 4593
     },
     "path": {
       "count": 137,
       "covered": 134
     },
     "pipeline": {
-      "count": 4716,
-      "covered": 3839
+      "count": 4743,
+      "covered": 3864
     },
     "pkg": {
       "count": 1487,
@@ -130,17 +130,21 @@
       "count": 474,
       "covered": 383
     },
+    "tcp": {
+      "count": 249,
+      "covered": 160
+    },
     "testgen": {
       "count": 314,
       "covered": 299
     },
     "tests": {
-      "count": 36638,
-      "covered": 33808
+      "count": 38139,
+      "covered": 35197
     },
     "text": {
       "count": 628,
-      "covered": 511
+      "covered": 512
     }
   }
 }

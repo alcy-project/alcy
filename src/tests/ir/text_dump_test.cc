@@ -312,9 +312,9 @@ TEST_CASE("The text view prints character and rune immediates") {
   const TypeIdx ch = builder.primitive(TypeTag::Char);
   const TypeIdx rune = builder.primitive(TypeTag::Rune);
 
-  const auto add_return = [&](TypeIdx type, u64 bits, std::string_view name) {
-    const ImmutableIdx imm =
-        builder.immutable({.type = type, .data = {.u64_value = bits}});
+  const auto add_return = [&](const Immutable& value, std::string_view name) {
+    const TypeIdx type = value.type;
+    const ImmutableIdx imm = builder.immutable(value);
     const OperandIdx operand =
         builder.operand(Operand::from_immutable(imm, type));
     const BlockIdx block = builder.block({});
@@ -334,8 +334,10 @@ TEST_CASE("The text view prints character and rune immediates") {
                                .generics = TypeIdxRange{}},
                       .blocks = {block, 1}});
   };
-  add_return(ch, 10, "ch");
-  add_return(rune, 233, "rune");
+  add_return({.type = ch, .data = {.u8_value = 10}}, "ch");
+  add_return({.type = rune, .data = {.u32_value = 233}}, "rune");
+  add_return({.type = ch, .data = {.u8_value = 0xF0}}, "ch_high");
+  add_return({.type = rune, .data = {.u32_value = 0x1F600}}, "rune_high");
 
   const Storage storage(std::move(builder).take_state());
   const WriteInput input{
@@ -352,6 +354,9 @@ TEST_CASE("The text view prints character and rune immediates") {
   const std::string text = write_text(input);
   CHECK(text.find("ret 10\n") != std::string::npos);
   CHECK(text.find("ret 233\n") != std::string::npos);
+  CHECK(text.find("ret 240\n") != std::string::npos);
+  CHECK(text.find("ret 128512\n") != std::string::npos);
+  CHECK(text.find("ret 96\n") == std::string::npos);
 }
 
 TEST_CASE("The text view prints a const argument") {

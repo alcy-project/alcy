@@ -36,6 +36,7 @@ executable("tests") {
     "codegen/wasm_writer_test.cc",
     "codegen/x86_64_encoder_test.cc",
     "codegen/x86_64_printer_test.cc",
+    "comp/comp_value_test.cc",
     "diag/bag_test.cc",
     "diag/render_test.cc",
     "diag/worker_bags_test.cc",

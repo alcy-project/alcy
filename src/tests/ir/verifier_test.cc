@@ -1574,4 +1574,23 @@ TEST_CASE("Verify instruction operand arity") {
                 VerificationErrorKind::UnknownOpcode);
 }
 
+TEST_CASE("Every verification kind maps to its own stable diagnostic code") {
+  constexpr u8 last =
+      static_cast<u8>(VerificationErrorKind::MisplacedSemanticMarker);
+  for (u8 raw = 0; raw <= last; ++raw) {
+    const auto kind = static_cast<VerificationErrorKind>(raw);
+    const diag::Diagnostic diagnostic =
+        to_diagnostic(VerificationError{kind, 0});
+    CHECK(diagnostic.severity == diag::Severity::Error);
+    CHECK(diagnostic.code.has_value());
+    if (!diagnostic.code.has_value()) {
+      continue;
+    }
+    CHECK(diagnostic.code->stage == diag::Stage::Ir);
+    CHECK(diagnostic.code->id == raw + 1);
+    CHECK(diagnostic.message == format_as(kind));
+    CHECK(!diagnostic.message.empty());
+  }
+}
+
 }  // namespace ir

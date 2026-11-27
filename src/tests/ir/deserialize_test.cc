@@ -4,6 +4,7 @@
 #include "ir/deserialize.h"
 
 #include <array>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -115,6 +116,69 @@ TEST_CASE("A serialized package reads back as the same bytes") {
   // Reading and writing again produces the bytes it read.
   LoadedInput input(package);
   CHECK(serialize(input.input) == bytes);
+}
+
+TEST_CASE("A pooled string immutable survives the binary form") {
+  SymbolTable strings;
+  const std::string_view text("ab\0cd", 5);
+  const std::optional<str::StringPoolId> maybe_id = strings.intern_copied(text);
+  CHECK(maybe_id.has_value());
+  if (!maybe_id.has_value()) {
+    return;
+  }
+  const str::StringPoolId id = *maybe_id;
+  StorageBuilder builder;
+  const TypeIdx str = builder.primitive(TypeTag::Str);
+  const ImmutableIdx imm =
+      builder.immutable({.type = str, .data = {.str_id_value = id}});
+  const OperandIdx operand = builder.operand(Operand::from_immutable(imm, str));
+  const BlockIdx entry = builder.block({{}, {}});
+  const InstructionIdx ret = builder.instr({.op = Opcode::Ret,
+                                            .flags = {},
+                                            .dst = RegisterIdx::invalid(),
+                                            .measure = TypeIdx::invalid(),
+                                            .operands = {operand, 1}});
+  builder.set_block_instrs(entry, {ret, 1});
+  const std::optional<str::StringPoolId> maybe_main =
+      strings.intern_copied("main");
+  CHECK(maybe_main.has_value());
+  if (!maybe_main.has_value()) {
+    return;
+  }
+  builder.function({.meta = {.return_type = str,
+                             .param_types = {},
+                             .name = *maybe_main,
+                             .path = str::EMPTY_STRING_ID,
+                             .kind = SymbolKind::Free,
+                             .generics = TypeIdxRange{}},
+                    .blocks = {entry, 1}});
+  const Storage storage = std::move(builder).build().unwrap().unwrap();
+
+  const std::array<std::string_view, 1> names{"main.al"};
+  const std::array<AddrName, 0> addr_names{};
+  const WriteInput input{
+      .storage = &storage,
+      .strings = &strings,
+      .instr_spans = {},
+      .files = FileTable{.names = names, .hashes = {}},
+      .addr_names = addr_names,
+      .summary = {},
+      .prelude_functions = 0,
+      .width = PointerWidth::W64,
+      .compiler_version = "0.0.0-test",
+  };
+  const std::vector<u8> bytes = serialize(input);
+  base::Result<LoadedIr, IrLoadError> loaded = deserialize(bytes);
+  CHECK(loaded.is_ok());
+  if (loaded.is_err()) {
+    return;
+  }
+  LoadedIr package = std::move(loaded).unwrap();
+  const Storage& read = *package.storage;
+  const Immutable& back = read.immutables()[ImmutableIdx(0)];
+  CHECK(package.strings->get(back.data.str_id_value) == text);
+  LoadedInput again(package);
+  CHECK(serialize(again.input) == bytes);
 }
 
 TEST_CASE("A const argument survives the binary form") {

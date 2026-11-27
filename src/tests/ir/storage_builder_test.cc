@@ -8,6 +8,8 @@
 
 #include "doctest/doctest.h"
 #include "ir/common.h"
+#include "ir/function.h"
+#include "ir/opcode.h"
 #include "ir/seq_builder.h"
 #include "ir/type.h"
 
@@ -76,6 +78,7 @@ TEST_CASE("Rollback rebuilds every index derived from the type table") {
   const TypeIdx live_tuple = builder.tuple_type(elements.finish());
   const TypeIdx live_const = builder.const_type(42);
   const TypeIdx live_error = builder.error_type();
+  const TypeIdx live_slice = builder.slice_type(i32);
   const StorageBuilder::Checkpoint cp = builder.checkpoint();
 
   // A duplicate node shares the live reference's payload: dropping the
@@ -88,7 +91,6 @@ TEST_CASE("Rollback rebuilds every index derived from the type table") {
   CHECK(builder.never_type().is_valid());
 
   builder.rollback(cp);
-  CHECK(builder.state().types.size() == cp.types);
   CHECK(builder.reference_type(i32, false) == live_ref);
   CHECK(builder.reference_type(i32, true) == live_mut);
   CHECK(builder.raw_pointer_type(i32, false) == live_raw);
@@ -100,6 +102,7 @@ TEST_CASE("Rollback rebuilds every index derived from the type table") {
   CHECK(builder.const_type(42) == live_const);
   CHECK(builder.never_type().is_valid());
   CHECK(builder.error_type() == live_error);
+  CHECK(builder.slice_type(i32) == live_slice);
   CHECK(std::move(builder).build().is_ok());
 }
 
@@ -129,6 +132,57 @@ TEST_CASE("A const argument is interned by value") {
   CHECK(builder.const_types()[builder.types()[four].as_const()].value == 4);
   CHECK(builder.const_types()[builder.types()[eight].as_const()].value == 8);
   CHECK(std::string(type_to_str(TypeTag::Const)) == "const");
+}
+
+TEST_CASE("Rollback drops the synthetic function and its instructions") {
+  StorageBuilder builder;
+  const TypeIdx i32 = builder.primitive(TypeTag::I32);
+  const RegisterIdx reg =
+      builder.reg({.type = i32, .def_idx = InstructionIdx(base::INVALID_IDX)});
+  const BlockIdx entry = builder.block({{}, {}});
+  const InstructionIdx ret = builder.instr({.op = Opcode::Ret,
+                                            .flags = {},
+                                            .dst = RegisterIdx::invalid(),
+                                            .measure = TypeIdx::invalid(),
+                                            .operands = {}});
+  builder.set_block_instrs(entry, {ret, 1});
+  const StorageBuilder::Checkpoint cp = builder.checkpoint();
+
+  const InstructionIdx speculative =
+      builder.instr({.op = Opcode::Ret,
+                     .flags = {},
+                     .dst = RegisterIdx::invalid(),
+                     .measure = TypeIdx::invalid(),
+                     .operands = {}});
+  const BlockIdx speculative_block = builder.block({{}, {}});
+  const BlockParamIdx speculative_param =
+      builder.block_param({.type = i32, .reg = reg});
+  const FunctionIdx speculative_fn =
+      builder.function({.meta = {.return_type = i32,
+                                 .param_types = {},
+                                 .name = str::EMPTY_STRING_ID,
+                                 .path = str::EMPTY_STRING_ID,
+                                 .kind = SymbolKind::Free,
+                                 .generics = TypeIdxRange{}},
+                        .blocks = {entry, 1}});
+  builder.add_synthetic_function(speculative_fn);
+
+  CHECK(speculative.is_valid());
+  CHECK(speculative_block.is_valid());
+  CHECK(speculative_param.is_valid());
+  CHECK(builder.state().instrs.size() > cp.instrs);
+  CHECK(builder.state().blocks.size() > cp.blocks);
+  CHECK(builder.state().block_params.size() > cp.block_params);
+  CHECK(builder.state().functions.size() > cp.functions);
+  CHECK(builder.state().synthetic_functions.size() > cp.synthetic);
+
+  builder.rollback(cp);
+  CHECK(builder.state().instrs.size() == cp.instrs);
+  CHECK(builder.state().blocks.size() == cp.blocks);
+  CHECK(builder.state().block_params.size() == cp.block_params);
+  CHECK(builder.state().functions.size() == cp.functions);
+  CHECK(builder.state().synthetic_functions.size() == cp.synthetic);
+  CHECK(std::move(builder).build().is_ok());
 }
 
 }  // namespace

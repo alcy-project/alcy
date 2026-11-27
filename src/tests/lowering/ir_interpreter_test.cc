@@ -1755,4 +1755,463 @@ TEST_CASE("Const IR path carries aggregates, strings and comp params") {
         "abc");
 }
 
+struct ItemOutcome {
+  bool ok = false;
+  analyzer::CompEval::EvalFailure failure;
+  comp::CompVal value;
+};
+
+// One evaluator for several const items: each call must clear the
+// previous failure and reset its budget instead of reusing it.
+std::vector<ItemOutcome> evaluate_items_with_one_evaluator(
+    Fixture& f,
+    analyzer::CheckedPackage& checked,
+    std::initializer_list<std::string_view> names) {
+  std::vector<ItemOutcome> out;
+  ir::StorageBuilder builder(std::move(checked.types).unwrap().take_state());
+  analyzer::CompEval evaluator(
+      analyzer::CompInputs{checked.tree, f.strings, checked.modules,
+                           checked.generic_insts, checked.type_origins,
+                           checked.fn_insts},
+      f.ast, builder, ir::PointerWidth::W64);
+  for (std::string_view name : names) {
+    const ast::ExprIdx init = find_const_init(f.ast, name);
+    analyzer::CompEval::EvalResult result =
+        evaluator.evaluate_item(0, init, analyzer::NO_INST);
+    ItemOutcome outcome;
+    outcome.ok = result.is_ok();
+    if (outcome.ok) {
+      outcome.value = std::move(result).unwrap();
+    } else {
+      outcome.failure = std::move(result).unwrap_err();
+    }
+    out.push_back(std::move(outcome));
+  }
+  return out;
+}
+
+TEST_CASE("Comp evaluation reads isize as a signed width") {
+  VirtualDir dir;
+  Scenario scenario;
+  const bool built = build_scenario(dir,
+                                    "comp fn neg_lt(a: isize) -> bool {\n"
+                                    "  ret a < 0isize\n"
+                                    "}\n"
+                                    "comp fn add_one(a: isize) -> isize {\n"
+                                    "  ret a + 1isize\n"
+                                    "}\n"
+                                    "const LT: bool := neg_lt(-1isize)\n"
+                                    "const SUM: isize := add_one(-1isize)\n"
+                                    "const DIRECT: isize := -1isize + 1isize\n"
+                                    "fn main() {}\n",
+                                    {"LT", "SUM", "DIRECT"}, scenario);
+  CHECK(built);
+  if (!built || scenario.asts.size() != 3) {
+    return;
+  }
+  CHECK(scenario.asts[0].value.tag == comp::CompValue::Tag::Bool);
+  CHECK(scenario.asts[0].value.bool_value);
+  check_int_value(*scenario.storage, scenario.asts[1], 0);
+  check_int_value(*scenario.storage, scenario.asts[2], 0);
+}
+
+TEST_CASE("Const IR reads narrow immutables at their own width") {
+  VirtualDir dir;
+  Scenario scenario;
+  const bool built = build_scenario(
+      dir,
+      "const T: (bool, i8) := comp { (1 < 2, -84i8) }\n"
+      "const A: [i8; 2] := comp { [-84i8, 1i8] }\n"
+      "const M: i8 := comp { match -84i8 { -84 => 7i8, _ => 0i8 } }\n"
+      "const P: i8 := comp { 2i8 ** 3i8 }\n"
+      "fn main() {}\n",
+      {"T", "A", "M", "P"}, scenario);
+  CHECK(built);
+  if (!built || scenario.asts.size() != 4) {
+    return;
+  }
+  CHECK(scenario.asts[0].value.tag == comp::CompValue::Tag::Tuple);
+  CHECK(scenario.asts[0].value.fields.size() == 2);
+  if (scenario.asts[0].value.fields.size() == 2) {
+    CHECK(scenario.asts[0].value.fields[0].tag == comp::CompValue::Tag::Bool);
+    CHECK(scenario.asts[0].value.fields[0].bool_value);
+    CHECK(scenario.asts[0].value.fields[1].int_value == 0xAC);
+  }
+  CHECK(scenario.asts[1].value.tag == comp::CompValue::Tag::Array);
+  CHECK(scenario.asts[1].value.fields.size() == 2);
+  if (scenario.asts[1].value.fields.size() == 2) {
+    CHECK(scenario.asts[1].value.fields[0].int_value == 0xAC);
+    CHECK(scenario.asts[1].value.fields[1].int_value == 1);
+  }
+  check_int_value(*scenario.storage, scenario.asts[2], 7);
+  check_int_value(*scenario.storage, scenario.asts[3], 8);
+}
+
+TEST_CASE("One evaluator clears its failure between const items") {
+  VirtualDir dir;
+  write_all(dir, {{"main.al",
+                   "const BAD1: i32 := comp { 1 / 0 }\n"
+                   "const BAD2: i32 := comp { [10, 20, 30][9] }\n"
+                   "const OK: i32 := comp { 1 + 2 }\n"
+                   "fn main() {}\n"}});
+  Fixture fixture;
+  CheckCase checked = check_case(dir, "main.al", {"main.al"}, fixture);
+  CHECK(checked.ok);
+  CHECK(checked.checked.has_value());
+  if (!checked.ok || !checked.checked.has_value()) {
+    return;
+  }
+
+  const std::vector<ItemOutcome> items = evaluate_items_with_one_evaluator(
+      fixture, *checked.checked, {"BAD1", "BAD2", "OK"});
+  CHECK(items.size() == 3);
+  if (items.size() != 3) {
+    return;
+  }
+  CHECK(!items[0].ok);
+  CHECK(items[0].failure.kind == analyzer::CompEval::Failure::DivZero);
+  CHECK(items[0].failure.what.find("zero") != std::string::npos);
+  CHECK(!items[1].ok);
+  CHECK(items[1].failure.kind == analyzer::CompEval::Failure::OutOfBounds);
+  CHECK(items[1].failure.what.find("bounds") != std::string::npos);
+  CHECK(items[2].ok);
+  CHECK(items[2].value.value.tag == comp::CompValue::Tag::Int);
+  CHECK(items[2].value.value.int_value == 3);
+}
+
+TEST_CASE("Lowering reads a const from the callee's module") {
+  VirtualDir dir;
+  write_all(dir, {{"main.al",
+                   "use self::shapes::scale;\n"
+                   "fn main() -> i32 { ret comp { scale(21) } }\n"},
+                  {"shapes.al",
+                   "pub const K: i32 := 4\n"
+                   "pub comp fn scale(x: i32) -> i32 { ret x * K }\n"}});
+  Fixture fixture;
+  CheckCase checked =
+      check_case(dir, "main.al", {"main.al", "shapes.al"}, fixture);
+  CHECK(checked.ok);
+  CHECK(checked.checked.has_value());
+  if (!checked.ok || !checked.checked.has_value()) {
+    return;
+  }
+  LowerCase lowered = lower_checked_case(std::move(*checked.checked), fixture);
+  CHECK(lowered.lowered.has_value());
+  if (!lowered.lowered.has_value()) {
+    return;
+  }
+  const ir::Storage& storage = *lowered.lowered->storage;
+  const ir::FunctionIdx main = find_function(storage, fixture.strings, "main");
+  CHECK(main.is_valid());
+  if (!main.is_valid()) {
+    return;
+  }
+  const RunResult run =
+      run_function(fixture, storage, main, {}, comp::COMP_BRANCH_QUOTA, 0);
+  CHECK(run.ok);
+  if (!run.ok) {
+    return;
+  }
+  check_int_value(storage, run.value, 84);
+}
+
+TEST_CASE("Comp evaluation follows a two-hop cross-module call") {
+  VirtualDir dir;
+  write_all(dir, {{"main.al",
+                   "use self::shapes::outer;\n"
+                   "fn main() -> i32 { ret comp { outer(5) } }\n"},
+                  {"shapes.al",
+                   "use package::geometry::inner;\n"
+                   "pub comp fn outer(x: i32) -> i32 { ret inner(x) + 1 }\n"},
+                  {"geometry.al",
+                   "pub comp fn inner(x: i32) -> i32 { ret x * 2 }\n"}});
+  Fixture fixture;
+  CheckCase checked = check_case(
+      dir, "main.al", {"main.al", "shapes.al", "geometry.al"}, fixture);
+  CHECK(checked.ok);
+  CHECK(checked.checked.has_value());
+  if (!checked.ok || !checked.checked.has_value()) {
+    return;
+  }
+  LowerCase lowered = lower_checked_case(std::move(*checked.checked), fixture);
+  CHECK(lowered.lowered.has_value());
+  if (!lowered.lowered.has_value()) {
+    return;
+  }
+  const ir::Storage& storage = *lowered.lowered->storage;
+  const ir::FunctionIdx main = find_function(storage, fixture.strings, "main");
+  CHECK(main.is_valid());
+  if (!main.is_valid()) {
+    return;
+  }
+  const RunResult run =
+      run_function(fixture, storage, main, {}, comp::COMP_BRANCH_QUOTA, 0);
+  CHECK(run.ok);
+  if (!run.ok) {
+    return;
+  }
+  check_int_value(storage, run.value, 11);
+}
+
+TEST_CASE("Comp evaluation compounds a reassign into a semantic field") {
+  VirtualDir dir;
+  Scenario scenario;
+  const bool built = build_scenario(dir,
+                                    "struct S { a: i32, b: i32 }\n"
+                                    "const V: i32 := comp {\n"
+                                    "  mut s := S { a: 10, b: 3 }\n"
+                                    "  s.a -= 2\n"
+                                    "  s.b |= 4\n"
+                                    "  s.a * s.b\n"
+                                    "}\n"
+                                    "fn main() {}\n",
+                                    {"V"}, scenario);
+  CHECK(built);
+  if (!built || scenario.asts.size() != 1) {
+    return;
+  }
+  check_int_value(*scenario.storage, scenario.asts[0], 56);
+}
+
+namespace {
+
+// One binary opcode over two compile-time constants of an explicit
+// width, so the interpreter's width rules can be read without a source
+// program that would fold the operation before it reaches IR.
+ir::Storage binary_const_ir(ir::SymbolTable& strings,
+                            ir::Opcode op,
+                            ir::TypeTag tag,
+                            u64 left,
+                            u64 right) {
+  ir::StorageBuilder builder;
+  const ir::TypeIdx type = ir::primitive_idx(tag);
+  const ir::ImmutableIdx lhs = builder.immutable(
+      {.type = type, .data = {.u64_value = left & comp::mask(tag)}});
+  const ir::ImmutableIdx rhs = builder.immutable(
+      {.type = type, .data = {.u64_value = right & comp::mask(tag)}});
+  ir::OperandSeq operands;
+  operands.push(builder.operand(ir::Operand::from_immutable(lhs, type)));
+  operands.push(builder.operand(ir::Operand::from_immutable(rhs, type)));
+  const ir::InstructionIdx binary =
+      builder.instr({.op = op,
+                     .flags = {},
+                     .dst = ir::RegisterIdx(0),
+                     .measure = ir::TypeIdx::invalid(),
+                     .operands = operands.finish()});
+  builder.reg({.type = type, .def_idx = binary});
+  const ir::OperandIdx result =
+      builder.operand(ir::Operand::from_register(ir::RegisterIdx(0), type));
+  const ir::InstructionIdx ret =
+      builder.instr({.op = ir::Opcode::Ret,
+                     .flags = {},
+                     .dst = ir::RegisterIdx::invalid(),
+                     .measure = ir::TypeIdx::invalid(),
+                     .operands = {result, 1}});
+  ir::InstrSeq instrs;
+  instrs.push(binary);
+  instrs.push(ret);
+  const ir::BlockIdx block =
+      builder.block({.instrs = instrs.finish(), .block_params = {}});
+  builder.function({.meta = {.return_type = type,
+                             .param_types = {},
+                             .name = strings.intern("binary"),
+                             .path = str::EMPTY_STRING_ID,
+                             .kind = ir::SymbolKind::Foreign,
+                             .generics = ir::TypeIdxRange{}},
+                    .blocks = {block, 1}});
+  return ir::Storage(std::move(builder).take_state());
+}
+
+RunResult run_binary(Fixture& f,
+                     ir::Opcode op,
+                     ir::TypeTag tag,
+                     u64 left,
+                     u64 right) {
+  const ir::Storage storage = binary_const_ir(f.strings, op, tag, left, right);
+  return run_function(f, storage, ir::FunctionIdx(0), {},
+                      comp::COMP_BRANCH_QUOTA, 0);
+}
+
+}  // namespace
+
+TEST_CASE("IR interpreter checks overflow at each operand width") {
+  Fixture f;
+  const RunResult add_i8 =
+      run_binary(f, ir::Opcode::IntAdd, ir::TypeTag::I8, 127, 1);
+  CHECK(!add_i8.ok);
+  CHECK(add_i8.error.kind == comp::IrRunError::Kind::Overflow);
+
+  const RunResult sub_i8 =
+      run_binary(f, ir::Opcode::IntSub, ir::TypeTag::I8, 0x80, 1);
+  CHECK(!sub_i8.ok);
+  CHECK(sub_i8.error.kind == comp::IrRunError::Kind::Overflow);
+
+  const RunResult mul_u8 =
+      run_binary(f, ir::Opcode::IntMul, ir::TypeTag::U8, 16, 16);
+  CHECK(!mul_u8.ok);
+  CHECK(mul_u8.error.kind == comp::IrRunError::Kind::Overflow);
+
+  const RunResult div_min =
+      run_binary(f, ir::Opcode::IntDiv, ir::TypeTag::I64,
+                 static_cast<u64>(1) << 63, static_cast<u64>(-1));
+  CHECK(div_min.ok);
+  if (div_min.ok) {
+    CHECK(div_min.value.value.int_value == (static_cast<u64>(1) << 63));
+  }
+}
+
+TEST_CASE("IR interpreter masks shift amounts and reverses the width") {
+  Fixture f;
+  const RunResult shl =
+      run_binary(f, ir::Opcode::ShiftLeft, ir::TypeTag::U8, 0x81, 8);
+  CHECK(shl.ok);
+  if (shl.ok) {
+    CHECK(shl.value.value.int_value == 0x81);
+  }
+
+  const RunResult shr =
+      run_binary(f, ir::Opcode::LogicalShiftRight, ir::TypeTag::U8, 0x81, 9);
+  CHECK(shr.ok);
+  if (shr.ok) {
+    CHECK(shr.value.value.int_value == 0x40);
+  }
+
+  const RunResult ashr =
+      run_binary(f, ir::Opcode::ArithmeticShiftRight, ir::TypeTag::I8, 0x80, 1);
+  CHECK(ashr.ok);
+  if (ashr.ok) {
+    CHECK(ashr.value.value.int_value == 0xC0);
+  }
+}
+
+TEST_CASE("IR interpreter refuses unsupported opcodes with declared wording") {
+  Fixture f;
+  const RunResult drop =
+      run_binary(f, ir::Opcode::ParametricDrop, ir::TypeTag::I32, 0, 0);
+  CHECK(!drop.ok);
+  CHECK(drop.error.kind == comp::IrRunError::Kind::Unsupported);
+  CHECK(comp::declared_refusal(drop.error.what));
+
+  const std::span<const std::string_view> refusals =
+      comp::unsupported_refusals();
+  CHECK(!refusals.empty());
+  for (std::string_view what : refusals) {
+    CHECK(comp::declared_refusal(what));
+  }
+  CHECK(!comp::declared_refusal("not a comp refusal"));
+}
+
+TEST_CASE("Comp evaluation matches an or-pattern on a semantic enum") {
+  VirtualDir dir;
+  Scenario scenario;
+  const bool built =
+      build_scenario(dir,
+                     "enum E { A(i32), B(i32) }\n"
+                     "const O: i32 := comp {\n"
+                     "  match E::A(3) { E::A(v) | E::B(v) => v }\n"
+                     "}\n"
+                     "fn main() {}\n",
+                     {"O"}, scenario);
+  CHECK(built);
+  if (!built || scenario.asts.size() != 1) {
+    return;
+  }
+  check_int_value(*scenario.storage, scenario.asts[0], 3);
+}
+
+namespace {
+
+usize count_functions_named(const ir::Storage& storage,
+                            const ir::SymbolTable& strings,
+                            std::string_view name) {
+  usize count = 0;
+  for (ir::FunctionIdx idx(0); idx.idx < storage.functions().size(); ++idx) {
+    if (strings.get(storage.functions()[idx].meta.name) == name) {
+      ++count;
+    }
+  }
+  return count;
+}
+
+}  // namespace
+
+TEST_CASE("Lowering materializes compile-time aggregates into runtime IR") {
+  VirtualDir dir;
+  write_all(dir, {{"main.al",
+                   "struct P { x: i32, y: i32 }\n"
+                   "enum E { A(i32), B }\n"
+                   "fn main() -> i32 {\n"
+                   "  p := comp { P { x: 3, y: 4 } }\n"
+                   "  a := comp { [10i32, 20i32] }\n"
+                   "  e := comp { E::A(7) }\n"
+                   "  chosen := match e { E::A(v) => v, E::B => 0 }\n"
+                   "  ret p.x + a[1] + chosen\n"
+                   "}\n"}});
+  Fixture f;
+  CheckCase checked = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(checked.ok);
+  CHECK(checked.checked.has_value());
+  if (!checked.ok || !checked.checked.has_value()) {
+    return;
+  }
+  LowerCase lowered = lower_checked_case(std::move(*checked.checked), f);
+  CHECK(lowered.lowered.has_value());
+  if (!lowered.lowered.has_value()) {
+    return;
+  }
+  const ir::Storage& storage = *lowered.lowered->storage;
+  const ir::FunctionIdx main = find_function(storage, f.strings, "main");
+  CHECK(main.is_valid());
+  if (!main.is_valid()) {
+    return;
+  }
+  const RunResult run =
+      run_function(f, storage, main, {}, comp::COMP_BRANCH_QUOTA, 0);
+  CHECK(run.ok);
+  if (run.ok) {
+    check_int_value(storage, run.value, 30);
+  }
+}
+
+TEST_CASE("Lowering specializes a function for each comp argument value") {
+  VirtualDir dir;
+  write_all(dir, {{"main.al",
+                   "struct P { x: i32 }\n"
+                   "fn pick(comp p: P) -> i32 { ret p.x }\n"
+                   "fn same(comp s: str) -> i32 { ret 0 }\n"
+                   "fn main() -> i32 {\n"
+                   "  a := pick(P { x: 1 })\n"
+                   "  b := pick(P { x: 2 })\n"
+                   "  c := same(\"abc\")\n"
+                   "  d := same(\"xyz\")\n"
+                   "  ret a + b + c - d\n"
+                   "}\n"}});
+  Fixture f;
+  CheckCase checked = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(checked.ok);
+  CHECK(checked.checked.has_value());
+  if (!checked.ok || !checked.checked.has_value()) {
+    return;
+  }
+  LowerCase lowered = lower_checked_case(std::move(*checked.checked), f);
+  CHECK(lowered.lowered.has_value());
+  if (!lowered.lowered.has_value()) {
+    return;
+  }
+  const ir::Storage& storage = *lowered.lowered->storage;
+  CHECK(count_functions_named(storage, f.strings, "pick") == 2);
+  CHECK(count_functions_named(storage, f.strings, "same") == 2);
+  const ir::FunctionIdx main = find_function(storage, f.strings, "main");
+  CHECK(main.is_valid());
+  if (!main.is_valid()) {
+    return;
+  }
+  const RunResult run =
+      run_function(f, storage, main, {}, comp::COMP_BRANCH_QUOTA, 0);
+  CHECK(run.ok);
+  if (run.ok) {
+    check_int_value(storage, run.value, 3);
+  }
+}
+
 }  // namespace lowering
