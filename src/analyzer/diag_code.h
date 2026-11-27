@@ -116,6 +116,8 @@ enum class DiagCode : u8 {
   // be declared without a receiver: a method binds its receiver from the
   // value it is called on, and a path leaves that value out.
   MethodNeedsReceiver = 51,
+  ConstInSpecImpl = 52,
+  GenericAssociatedConst = 53,
 };
 
 }  // namespace analyzer

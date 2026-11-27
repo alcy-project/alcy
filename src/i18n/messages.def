@@ -150,6 +150,8 @@
   F(AnalyzerMutMethodNeedsMut, Error, Analyzer, "Cannot call '{}' on an immutable binding; declare it `mut`") \
   F(AnalyzerAssociatedFunctionAsMethod, Error, Analyzer, "Associated function '{}' called as a method") \
   F(AnalyzerAssociatedFunctionNeedsTypeArguments, Error, Analyzer, "Calling '{}' needs type arguments to name an associated function; write '{}::<T>::{}'") \
+  F(AnalyzerConstInSpecImpl, Error, Analyzer, "An associated const belongs in an inherent impl, not a spec impl") \
+  F(AnalyzerGenericAssociatedConst, Error, Analyzer, "Associated constants in a generic impl are not supported yet") \
   F(AnalyzerBadDestructorSignature, Error, Analyzer, "Destructor must be 'fn drop(self: Self)' returning nothing") \
   F(AnalyzerBreakOutsideLoop, Error, Analyzer, "Break outside of a loop") \
   F(AnalyzerBufferNotMutableSlice, Error, Analyzer, "Buffer must be `&mut [u8]`") \

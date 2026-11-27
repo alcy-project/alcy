@@ -971,6 +971,11 @@ bool Checker::resolve_value_argument(u32 module,
       return true;
     }
   }
+  if (const auto* constant =
+          find_associated_const_path(module, path_idx, span)) {
+    return const_int_value<i18n::Key::AnalyzerValueArgumentNotInteger>(
+        ConstDefinition(*constant), span, out);
+  }
   u32 target = NO_MODULE;
   if (!walk_module_prefix(module, path_idx, "value", target)) {
     return false;
@@ -988,7 +993,7 @@ bool Checker::resolve_value_argument(u32 module,
     }
     const CheckedModule::StaticInfo definition = *info;
     return const_int_value<i18n::Key::AnalyzerValueArgumentNotInteger>(
-        definition, span, out);
+        ConstDefinition(definition), span, out);
   }
   // A single name that is an in-scope type is the case a declaration
   // spells with a value slot by mistake; name the slot rather than
@@ -2103,6 +2108,11 @@ void Checker::process_module(u32 module) {
           desugar_own_fn_params(method_item);
         }
         if (node.payload.get<ast::ItemImpl>().spec.is_valid()) {
+          if (!node.payload.get<ast::ItemImpl>().consts.empty()) {
+            const u32 index = bag.emit<i18n::Key::AnalyzerConstInSpecImpl>(
+                DiagCode::ConstInSpecImpl, ast.items[item].span);
+            (void)index;
+          }
           register_spec_impl(module, item);
           break;
         }
@@ -2217,6 +2227,45 @@ void Checker::process_module(u32 module) {
               bag.emit<i18n::Key::AnalyzerInherentImplNeedsNominalType>(
                   DiagCode::UnknownType, self_node.span);
           (void)index;
+        }
+        for (ast::ItemIdx constant : node.payload.get<ast::ItemImpl>().consts) {
+          const ast::ItemNode& const_node = ast.items[constant];
+          const ast::ItemConst& declaration =
+              const_node.payload.get<ast::ItemConst>();
+          if (generic_impl) {
+            const u32 index =
+                bag.emit<i18n::Key::AnalyzerGenericAssociatedConst>(
+                    DiagCode::GenericAssociatedConst, declaration.name.span);
+            (void)index;
+            continue;
+          }
+          if (!self_ok) {
+            continue;
+          }
+          bool duplicate = false;
+          for (const CheckedModule::AssociatedConstInfo& previous :
+               modules[module].associated_consts) {
+            if (previous.owner.idx == self_type.idx &&
+                previous.name == declaration.name.name) {
+              duplicate = true;
+              break;
+            }
+          }
+          if (duplicate) {
+            const u32 index = bag.emit<i18n::Key::AnalyzerDuplicateDefinition>(
+                DiagCode::DuplicateDefinition, declaration.name.span,
+                declaration.name.name);
+            (void)index;
+            continue;
+          }
+          modules[module].associated_consts.push_back(
+              {.name = declaration.name.name,
+               .item = constant,
+               .owner = self_type,
+               .type = resolve_type(module, declaration.type, &self_type),
+               .init = declaration.init,
+               .module = module,
+               .is_pub = const_node.is_pub});
         }
         for (ast::ItemIdx method : node.payload.get<ast::ItemImpl>().methods) {
           const ast::ItemNode& method_node = ast.items[method];
@@ -2462,6 +2511,10 @@ bool Checker::const_array_length(u32 module,
     return false;
   }
   const std::string_view name = segments.back().name;
+  if (const auto* constant = find_associated_const_path(module, path, span)) {
+    return const_int_value<i18n::Key::AnalyzerArrayLengthNotConst>(
+        ConstDefinition(*constant), span, out);
+  }
   if (segments.size() == 1) {
     // A value parameter of the enclosing declaration shadows an item of
     // the same name, exactly as a type parameter does.
@@ -2499,12 +2552,12 @@ bool Checker::const_array_length(u32 module,
   // and registering a dependency can grow the table this pointer names,
   // so carry a copy.
   const CheckedModule::StaticInfo definition = *info;
-  return const_int_value<i18n::Key::AnalyzerArrayLengthNotConst>(definition,
-                                                                 span, out);
+  return const_int_value<i18n::Key::AnalyzerArrayLengthNotConst>(
+      ConstDefinition(definition), span, out);
 }
 
 template <i18n::Key not_const_key>
-bool Checker::const_int_value(const CheckedModule::StaticInfo& info,
+bool Checker::const_int_value(const ConstDefinition& info,
                               diag::Span span,
                               u64& out) {
   const auto cached = constInitTables_.const_int_values_.find(info.init.idx);
@@ -2549,7 +2602,7 @@ bool Checker::const_int_value(const CheckedModule::StaticInfo& info,
   return true;
 }
 
-bool Checker::ensure_const_checked(const CheckedModule::StaticInfo& info) {
+bool Checker::ensure_const_checked(const ConstDefinition& info) {
   const u32 key = info.init.idx;
   if (constInitTables_.const_init_checked_.contains(key)) {
     return !constInitTables_.const_init_failed_.contains(key);
@@ -2748,6 +2801,14 @@ bool Checker::check_const_dependencies_block(u32 module, ast::BlockIdx block) {
 
 bool Checker::check_const_dependency_path(u32 module, ast::PathIdx path) {
   const std::span<const ast::Ident> segments = ast.paths[path].segments;
+  if (segments.size() == 2) {
+    const auto* constant = find_associated_const_path(
+        module, path, ast.paths[path].segments[1].span);
+    if (constant == nullptr) {
+      return true;
+    }
+    return ensure_const_checked(ConstDefinition(*constant));
+  }
   if (segments.size() != 1) {
     return true;
   }
@@ -2757,7 +2818,7 @@ bool Checker::check_const_dependency_path(u32 module, ast::PathIdx path) {
     return true;
   }
   const CheckedModule::StaticInfo definition = *info;
-  return ensure_const_checked(definition);
+  return ensure_const_checked(ConstDefinition(definition));
 }
 
 void Checker::precheck_called_fn(u32 module, ast::ExprIdx callee) {
@@ -3697,6 +3758,53 @@ const CheckedModule::MethodInfo* Checker::lookup_inherent_method(
   return nullptr;
 }
 
+const CheckedModule::AssociatedConstInfo* Checker::lookup_associated_const(
+    ir::TypeIdx self,
+    std::string_view name,
+    u32 module,
+    diag::Span span) {
+  for (const CheckedModule& owner : modules) {
+    for (const CheckedModule::AssociatedConstInfo& info :
+         owner.associated_consts) {
+      if (info.owner.idx != self.idx || info.name != name) {
+        continue;
+      }
+      (void)check_item_access(module, info.module, info.is_pub, span, name);
+      return &info;
+    }
+  }
+  return nullptr;
+}
+
+const CheckedModule::AssociatedConstInfo* Checker::find_associated_const_path(
+    u32 module,
+    ast::PathIdx path,
+    diag::Span span) {
+  const ast::Path& node = ast.paths[path];
+  if (node.segments.size() != 2) {
+    return nullptr;
+  }
+  ir::TypeIdx owner = head_named_type(node.segments[0].name);
+  if (is_error(owner)) {
+    if (NominalEntry* entry =
+            find_nominal_in_scope(module, node.segments[0].name)) {
+      owner = intern_nominal(*entry);
+    }
+  }
+  if (is_error(owner)) {
+    return nullptr;
+  }
+  const CheckedModule::AssociatedConstInfo* constant =
+      lookup_associated_const(owner, node.segments[1].name, module, span);
+  if (constant == nullptr) {
+    return nullptr;
+  }
+  const auto& table = modules[constant->module].associated_consts;
+  const u32 index = static_cast<u32>(constant - table.data());
+  modules[module].record_associated_const_use(path, index);
+  return constant;
+}
+
 // The method a type parameter's declared bounds provide: a
 // bound's spec declares it, its signature resolves with the bound's
 // arguments and `Self` at the parameter, and the row it registers
@@ -4225,6 +4333,10 @@ diag::Span Checker::declaration_of(const PathValue& value) const {
     case Kind::AssocFunction:
       return value.method == nullptr ? diag::Span{}
                                      : item_name_span(value.method->item);
+    case Kind::AssociatedConst:
+      return value.associated_const == nullptr
+                 ? diag::Span{}
+                 : item_name_span(value.associated_const->item);
     case Kind::GenericFn: return item_name_span(value.generic_item);
     case Kind::UnitVariant:
     case Kind::TupleVariant: {
@@ -4632,6 +4744,13 @@ bool Checker::resolve_value_path_impl(u32 module,
         (void)index;
         return false;
       }
+      if (const CheckedModule::AssociatedConstInfo* constant =
+              lookup_associated_const(self, member, module, node.span)) {
+        out.kind = PathValue::Kind::AssociatedConst;
+        out.type = constant->type;
+        out.associated_const = constant;
+        return true;
+      }
     }
     // A scalar or a bound type parameter as the prefix: `i64::parse`
     // and `T::parse` reach an associated function or a spec's
@@ -4650,6 +4769,13 @@ bool Checker::resolve_value_path_impl(u32 module,
             DiagCode::MethodNeedsReceiver, node.span, head, member);
         (void)index;
         return false;
+      }
+      if (const CheckedModule::AssociatedConstInfo* constant =
+              lookup_associated_const(head_type, member, module, node.span)) {
+        out.kind = PathValue::Kind::AssociatedConst;
+        out.type = constant->type;
+        out.associated_const = constant;
+        return true;
       }
     }
     // The hint names the package that carries `member` when one does,
@@ -5158,6 +5284,33 @@ void Checker::check_bodies() {
                 self_ptr = &self;
               }
             }
+          } else if (self_node.kind == ast::TypeKind::Primitive) {
+            self = resolve_type(m, node.payload.get<ast::ItemImpl>().type,
+                                nullptr);
+            if (!is_error(self)) {
+              self_ptr = &self;
+            }
+          }
+          for (ast::ItemIdx constant :
+               node.payload.get<ast::ItemImpl>().consts) {
+            const ast::ItemConst& declaration =
+                ast.items[constant].payload.get<ast::ItemConst>();
+            if (constInitTables_.const_init_checked_.contains(
+                    declaration.init.idx)) {
+              continue;
+            }
+            const ir::TypeIdx declared =
+                resolve_type(m, declaration.type, self_ptr);
+            scopes.emplace_back();
+            ++comp_depth;
+            ++comp_eval_depth;
+            const ir::TypeIdx actual =
+                check_expr(m, declaration.init, &declared);
+            --comp_eval_depth;
+            --comp_depth;
+            unify(declared, actual, ast.exprs[declaration.init].span,
+                  "item initializer");
+            scopes.pop_back();
           }
           for (ast::ItemIdx method :
                node.payload.get<ast::ItemImpl>().methods) {

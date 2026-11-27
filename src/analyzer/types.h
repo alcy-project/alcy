@@ -168,6 +168,46 @@ struct CheckedModule {
     bool is_pub = false;
   };
   std::vector<StaticInfo> statics;
+  // A compile-time value owned by a type, declared inside an inherent
+  // `impl`. It is not a module static: the owner is part of its name, and
+  // it is named `Type::NAME`. The initializer is evaluated in the module
+  // that declared it, the way a module const's is.
+  struct AssociatedConstInfo {
+    std::string_view name;
+    ast::ItemIdx item = ast::ItemIdx::invalid();
+    ir::TypeIdx owner = ir::TypeIdx::invalid();
+    ir::TypeIdx type = ir::TypeIdx::invalid();
+    ast::ExprIdx init = ast::ExprIdx::invalid();
+    u32 module = 0;
+    bool is_pub = false;
+  };
+  std::vector<AssociatedConstInfo> associated_consts;
+  // Where an expression or a type position read `Type::CONST`. Lowering
+  // and comp evaluation use the recorded entry instead of resolving the
+  // path again. Keyed by path, which both an expression and an array
+  // length carry.
+  struct AssociatedConstUse {
+    ast::PathIdx path = ast::PathIdx::invalid();
+    u32 index = base::INVALID_IDX;
+  };
+  std::vector<AssociatedConstUse> associated_const_uses;
+  std::unordered_map<u32, u32> associated_const_use_by_path;
+  [[nodiscard]] const AssociatedConstInfo* associated_const_of(
+      ast::PathIdx path) const {
+    const auto found = associated_const_use_by_path.find(path.idx);
+    if (found == associated_const_use_by_path.end() ||
+        found->second >= associated_consts.size()) {
+      return nullptr;
+    }
+    return &associated_consts[found->second];
+  }
+  void record_associated_const_use(ast::PathIdx path, u32 index) {
+    if (associated_const_use_by_path.contains(path.idx)) {
+      return;
+    }
+    associated_const_use_by_path.emplace(path.idx, index);
+    associated_const_uses.push_back({path, index});
+  }
   // Lowering side tables: every checked expression records its type,
   // and every checked call records its callee, so lowering never
   // re-resolves paths or re-derives types. `inst` keys entries

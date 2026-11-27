@@ -1175,15 +1175,32 @@ class Checker {
   // evaluator; `span` is where a failure is reported, and the key
   // parameter is the wording for a value that is not a non-negative
   // integer.
+  // The fields a const evaluation needs, shared by a module const and an
+  // associated const so the evaluator treats both the same way.
+  struct ConstDefinition {
+    std::string_view name;
+    u32 module;
+    ir::TypeIdx type;
+    ast::ExprIdx init;
+
+    explicit ConstDefinition(const CheckedModule::StaticInfo& info)
+        : name(info.name),
+          module(info.module),
+          type(info.type),
+          init(info.init) {}
+    explicit ConstDefinition(const CheckedModule::AssociatedConstInfo& info)
+        : name(info.name),
+          module(info.module),
+          type(info.type),
+          init(info.init) {}
+  };
   template <i18n::Key not_const_key>
-  bool const_int_value(const CheckedModule::StaticInfo& info,
-                       diag::Span span,
-                       u64& out);
+  bool const_int_value(const ConstDefinition& info, diag::Span span, u64& out);
   // Ensures the const item's initializer is checked (and its
   // dependencies', transitively), so the evaluator finds the
   // expressions it reads typed. A const that reaches itself is a
   // cycle.
-  bool ensure_const_checked(const CheckedModule::StaticInfo& info);
+  bool ensure_const_checked(const ConstDefinition& info);
   bool check_const_dependencies(u32 module, ast::ExprIdx expr);
   bool check_const_dependencies_block(u32 module, ast::BlockIdx block);
   bool check_const_dependency_path(u32 module, ast::PathIdx path);
@@ -1261,6 +1278,19 @@ class Checker {
                                                           std::string_view name,
                                                           u32 module,
                                                           diag::Span span);
+  // Finds an associated const declared on `self`. The tables are small
+  // today and registration can append while bodies are checked, so the
+  // lookup scans rather than holding an index that can fall behind.
+  const CheckedModule::AssociatedConstInfo* lookup_associated_const(
+      ir::TypeIdx self,
+      std::string_view name,
+      u32 module,
+      diag::Span span);
+  // A two-segment path in a type position (`[T; i32::MAX]`) has no
+  // checked expression to carry a use record, so resolve and record it
+  // here. Returns null when the head does not name a type.
+  const CheckedModule::AssociatedConstInfo*
+  find_associated_const_path(u32 module, ast::PathIdx path, diag::Span span);
   // Whether a compound impl target (`[T]`, `[T; N]`) matches a receiver,
   // binding the implementation's parameters to the receiver's parts.
   bool match_compound_target(
@@ -1457,6 +1487,7 @@ class Checker {
       GenericFn,
       UnitVariant,
       TupleVariant,
+      AssociatedConst,
       Type,
     };
     Kind kind = Kind::Type;
@@ -1465,6 +1496,7 @@ class Checker {
     const CheckedModule::MethodInfo* method = nullptr;
     NominalEntry* enom = nullptr;
     const CheckedModule::StaticInfo* object = nullptr;
+    const CheckedModule::AssociatedConstInfo* associated_const = nullptr;
     ast::ItemIdx generic_item = ast::ItemIdx::invalid();
     u32 variant = 0;
     // The declaration the path named, when the resolution found one.

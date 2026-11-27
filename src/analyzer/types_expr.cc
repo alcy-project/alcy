@@ -589,6 +589,9 @@ bool Checker::expr_comp_known(u32 module,
             return true;
           }
         }
+        if (const auto* constant = modules[module].associated_const_of(path)) {
+          return type_comp_known(constant->type);
+        }
         return false;
       }
       // A binding a surrounding pattern or declaration introduced is
@@ -1057,7 +1060,15 @@ ir::TypeIdx Checker::check_path_expr(u32 module,
     case PathValue::Kind::Local:
     case PathValue::Kind::ValueParam:
     case PathValue::Kind::Static:
+    case PathValue::Kind::AssociatedConst:
     case PathValue::Kind::UnitVariant: {
+      if (resolved.kind == PathValue::Kind::AssociatedConst) {
+        const CheckedModule::AssociatedConstInfo* constant =
+            resolved.associated_const;
+        const auto& table = modules[constant->module].associated_consts;
+        const u32 index = static_cast<u32>(constant - table.data());
+        modules[module].record_associated_const_use(path, index);
+      }
       if (resolved.kind == PathValue::Kind::Static && comp_eval_depth > 0 &&
           !is_const_item(module, path)) {
         const u32 index =

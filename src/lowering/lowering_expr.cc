@@ -884,6 +884,14 @@ Val Lowerer::lower_path(ast::ExprIdx expr, const ir::TypeIdx* expected) {
   const ast::ExprNode& node = ast.exprs[expr];
   const ast::PathIdx path = node.payload.get<ast::ExprPath>().idx;
   const std::span<const ast::Ident> segments = ast.paths[path].segments;
+  if (const auto* constant = pkg.modules[module].associated_const_of(path)) {
+    CompVal value;
+    if (!comp_lowering_.evaluate_item(constant->module, constant->init,
+                                      value)) {
+      return Val{size_one, error_type(), false, false};
+    }
+    return comp_lowering_.materialize(value, node.span);
+  }
   if (segments.size() == 1) {
     const std::string_view name = segments[0].name;
     // A value-parameter use is a compile-time constant: emit the value

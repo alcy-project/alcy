@@ -625,7 +625,33 @@ bool CompEval::path_value(EvalSite site,
                           comp::CompVal& out) {
   const std::span<const ast::Ident> segments = ast.paths[path].segments;
   if (segments.size() != 1) {
-    return false;
+    if (segments.size() != 2) {
+      return false;
+    }
+    const auto* constant =
+        inputs_.modules[site.module].associated_const_of(path);
+    if (constant == nullptr || !constant->init.is_valid()) {
+      return false;
+    }
+    if (call_depth_ >= COMP_MAX_CALL_DEPTH) {
+      return fail_budget(ast.paths[path].segments[1].span,
+                         "const evaluation is too deep");
+    }
+    CompVal value;
+    const u32 saved_inst = inst_;
+    inst_ = site.inst;
+    CompScope nested;
+    nested.frames.emplace_back();
+    ++call_depth_;
+    const bool ok =
+        try_ir_eval(constant->module, constant->init, nested, value);
+    --call_depth_;
+    inst_ = saved_inst;
+    if (!ok) {
+      return false;
+    }
+    out = std::move(value);
+    return true;
   }
   if (const comp::CompVal* bound = comp::lookup(scope, segments[0].name)) {
     out = *bound;
