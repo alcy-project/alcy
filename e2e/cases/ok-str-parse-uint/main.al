@@ -9,7 +9,7 @@ fn main() -> i32 {
   if u64::parse("+42").or_panic("expected a value") != 42u64 {
     ret 3
   }
-  if u64::parse("18446744073709551615").or_panic("expected a value") != 18446744073709551615u64 {
+  if u64::parse("18446744073709551615").or_panic("expected a value") != u64::MAX {
     ret 4
   }
   if u64::parse("18446744073709551616").is_some() {

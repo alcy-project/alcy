@@ -3,7 +3,7 @@
 // does not abort on a magnitude the signed range cannot hold
 // (rule that nothing is undefined).
 fn main() {
-  c: i64 := -9223372036854775808i64
-  a: i32 := -2147483648i32
+  c: i64 := i64::MIN
+  a: i32 := i32::MIN
   println("{} {}", c, a)
 }

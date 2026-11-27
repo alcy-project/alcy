@@ -11,22 +11,22 @@ fn main() -> i32 {
   if nan as i32 != 0 {
     ret 1
   }
-  if inf as i32 != 2147483647i32 {
+  if inf as i32 != i32::MAX {
     ret 2
   }
-  if ninf as i32 != -2147483648i32 {
+  if ninf as i32 != i32::MIN {
     ret 3
   }
-  if big as i32 != 2147483647i32 {
+  if big as i32 != i32::MAX {
     ret 4
   }
-  if big as i64 != 9223372036854775807i64 {
+  if big as i64 != i64::MAX {
     ret 5
   }
-  if inf as i8 != 127i8 {
+  if inf as i8 != i8::MAX {
     ret 6
   }
-  if ninf as i16 != -32768i16 {
+  if ninf as i16 != i16::MIN {
     ret 7
   }
   if nan as u8 != 0u8 {
@@ -35,14 +35,14 @@ fn main() -> i32 {
   if (-1.5f64) as u32 != 0u32 {
     ret 9
   }
-  if inf as u64 != 18446744073709551615u64 {
+  if inf as u64 != u64::MAX {
     ret 10
   }
   if (nan as f32) as i32 != 0 {
     ret 11
   }
   narrowed := big as f32
-  if narrowed as i64 != 9223372036854775807i64 {
+  if narrowed as i64 != i64::MAX {
     ret 12
   }
   // A value in range still truncates toward zero.
@@ -55,10 +55,10 @@ fn main() -> i32 {
   // The narrow unsigned band: a word above 2^31 compared signed
   // misses the clamp and truncates to the wrong byte; bool saturates
   // at its one bit.
-  if (3000000000.0f64) as u8 != 255u8 {
+  if (3000000000.0f64) as u8 != u8::MAX {
     ret 16
   }
-  if (2147483648.0f64) as u16 != 65535u16 {
+  if (2147483648.0f64) as u16 != u16::MAX {
     ret 17
   }
   if 1.5f64 as bool != true {

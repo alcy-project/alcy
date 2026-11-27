@@ -6,7 +6,7 @@ fn main() -> i32 {
   if u32::parse("+42").or_panic("expected a value") != 42u32 {
     ret 2
   }
-  if u32::parse("4294967295").or_panic("expected a value") != 4294967295u32 {
+  if u32::parse("4294967295").or_panic("expected a value") != u32::MAX {
     ret 3
   }
   if u32::parse("4294967296").is_some() {

@@ -12,10 +12,10 @@ fn main() -> i32 {
   if i64::parse("+7").or_panic("expected a value") != 7 {
     ret 4
   }
-  if i64::parse("9223372036854775807").or_panic("expected a value") != 9223372036854775807 {
+  if i64::parse("9223372036854775807").or_panic("expected a value") != i64::MAX {
     ret 5
   }
-  if i64::parse("-9223372036854775808").or_panic("expected a value") != 0i64 - 9223372036854775807i64 - 1i64 {
+  if i64::parse("-9223372036854775808").or_panic("expected a value") != i64::MIN {
     ret 6
   }
   if i64::parse("9223372036854775808").is_some() {

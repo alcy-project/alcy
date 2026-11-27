@@ -6,13 +6,13 @@ fn main() -> i32 {
   if i32::parse("-7").or_panic("expected a value") != 0 - 7 {
     ret 2
   }
-  if i32::parse("2147483647").or_panic("expected a value") != 2147483647 {
+  if i32::parse("2147483647").or_panic("expected a value") != i32::MAX {
     ret 3
   }
   if i32::parse("2147483648").is_some() {
     ret 4
   }
-  if i32::parse("-2147483648").or_panic("expected a value") != 0 - 2147483647 - 1 {
+  if i32::parse("-2147483648").or_panic("expected a value") != i32::MIN {
     ret 5
   }
   if i32::parse("-2147483649").is_some() {
