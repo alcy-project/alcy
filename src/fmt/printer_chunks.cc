@@ -259,14 +259,6 @@ bool Printer::ends_in_block(const std::vector<const cst::Node*>& code) {
   return false;
 }
 
-// A spelled-out semicolon survives wherever the newline that replaces
-// it would not read the same. A spec or extern member is terminated by
-// one outright. The last chunk of a body keeps its statement status:
-// without the semicolon the run becomes the block's trailing
-// expression instead of a statement whose value nobody takes. A run the
-// lexer does not end a statement after (an intrinsic signature that
-// closes in a greater-than) keeps it too. Everywhere else the line
-// break reads the same to the parser.
 // Whether the chunk is an item the grammar terminates with a
 // semicolon: a use, or an intrinsic signature. The newline a formatter
 // writes reads the same to the compiler, but the grammar spells these
@@ -311,6 +303,14 @@ bool Printer::chunk_starts_with_suppressor(const Chunk& chunk) {
   return false;
 }
 
+// A spelled-out semicolon survives wherever the newline that replaces
+// it would not read the same. A spec or extern member is terminated by
+// one outright. The last chunk of a body keeps its statement status:
+// without the semicolon the run becomes the block's trailing
+// expression instead of a statement whose value nobody takes. A run the
+// lexer does not end a statement after (an intrinsic signature that
+// closes in a greater-than) keeps it too. Everywhere else the line
+// break reads the same to the parser.
 bool Printer::keeps_semicolon(const Chunk& chunk,
                               const std::vector<const cst::Node*>& code,
                               cst::BraceRole role,
