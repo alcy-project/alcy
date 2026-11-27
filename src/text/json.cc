@@ -51,7 +51,7 @@ class JsonReader {
 
  private:
   bool read_value(u32 depth, JsonValue* out) {
-    if (depth > base::MAX_NESTING) {
+    if (depth >= base::MAX_NESTING) {
       fail(pos_, "JSON nesting is too deep");
       return false;
     }
