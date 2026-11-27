@@ -82,7 +82,10 @@ bool Transport::read_more() {
   if (eof_) {
     return false;
   }
-  if (start_ > 0) {
+  // Compacting on every read moves the unconsumed bytes of a large
+  // frame once per chunk. Keep the cursor and only move them when the
+  // consumed prefix is worth reclaiming.
+  if (start_ > 0 && (start_ >= CHUNK_SIZE || start_ * 2 >= buffer_.size())) {
     buffer_.erase(0, start_);
     start_ = 0;
   }

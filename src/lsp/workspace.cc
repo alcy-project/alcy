@@ -9,6 +9,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -159,14 +160,24 @@ std::string fingerprint(std::string_view root,
   builder.digest(base::hash128(read_or_empty(
       root_path.join(pkg::CONFIG_DIR_NAME).join(linter::LINT_FILE_NAME))));
 
-  const auto buffer_for = [&](std::string_view file) -> const BufferView* {
-    for (const BufferView& buffer : buffers) {
-      if (const std::optional<std::string> path = uri_to_path(buffer.uri);
-          path.has_value() && *path == file) {
-        return &buffer;
-      }
+  // Resolve each URI once: the loop below asks for every discovered
+  // file, and uri_to_path allocates a string on each of those asks.
+  std::vector<std::pair<std::string, const BufferView*>> buffer_paths;
+  buffer_paths.reserve(buffers.size());
+  for (const BufferView& buffer : buffers) {
+    if (std::optional<std::string> path = uri_to_path(buffer.uri);
+        path.has_value()) {
+      buffer_paths.emplace_back(std::move(*path), &buffer);
     }
-    return nullptr;
+  }
+  std::unordered_map<std::string_view, const BufferView*> buffers_by_path;
+  buffers_by_path.reserve(buffer_paths.size());
+  for (const auto& [path, buffer] : buffer_paths) {
+    buffers_by_path.emplace(path, buffer);
+  }
+  const auto buffer_for = [&](std::string_view file) -> const BufferView* {
+    const auto found = buffers_by_path.find(file);
+    return found == buffers_by_path.end() ? nullptr : found->second;
   };
 
   base::Result<pipeline::DiscoveredSourcePaths, diag::Reported> discovered =
@@ -191,17 +202,15 @@ std::string fingerprint(std::string_view root,
   // A buffer under the root that discovery never saw - an unsaved new
   // file - is still loaded as a virtual source by analyze_package. Its
   // bytes and version must steer the signature or edits go unnoticed.
-  for (const BufferView& buffer : buffers) {
-    const std::optional<std::string> path = uri_to_path(buffer.uri);
-    if (!path.has_value() || !under_root(*path, root) ||
-        discovered_files.contains(*path)) {
+  for (const auto& [path, buffer] : buffer_paths) {
+    if (!under_root(path, root) || discovered_files.contains(path)) {
       continue;
     }
-    builder.bytes(buffer.uri)
+    builder.bytes(buffer->uri)
         .u8(':')
-        .bytes(std::to_string(buffer.version))
+        .bytes(std::to_string(buffer->version))
         .u8(':')
-        .digest(base::hash128(buffer.text))
+        .digest(base::hash128(buffer->text))
         .u8(0);
   }
   return builder.finish().hex();
