@@ -146,14 +146,13 @@ struct Json {
   }
 
   // { "<key>": "<value>", ... } with string values only.
-  base::Result<std::unordered_map<std::string, std::string>, std::string>
-  parse_string_map() {
+  base::Result<StringMap, std::string> parse_string_map() {
     skip_ws();
     if (*cursor != '{') {
       return base::make_err(error_at("expected an object"));
     }
     cursor++;
-    std::unordered_map<std::string, std::string> table;
+    StringMap table;
     while (true) {
       skip_ws();
       if (*cursor == '}') {
@@ -372,14 +371,14 @@ base::Result<Catalog, std::string> load_catalog(const std::string& path) {
 std::string translate(const Catalog& catalog,
                       std::string_view language,
                       std::string_view key) {
-  const auto table = catalog.per_language.find(std::string(language));
+  const auto table = catalog.per_language.find(language);
   if (table != catalog.per_language.end()) {
-    const auto found = table->second.find(std::string(key));
+    const auto found = table->second.find(key);
     if (found != table->second.end()) {
       return found->second;
     }
   }
-  const auto fallback = catalog.messages.find(std::string(key));
+  const auto fallback = catalog.messages.find(key);
   return fallback != catalog.messages.end() ? fallback->second
                                             : std::string(key);
 }
@@ -419,7 +418,7 @@ std::vector<std::string> other_languages(const Catalog& catalog,
 
 LanguageInfo language_info_of(const Catalog& catalog,
                               std::string_view language) {
-  const auto name = catalog.language_names.find(std::string(language));
+  const auto name = catalog.language_names.find(language);
   return {name != catalog.language_names.end() ? name->second
                                                : std::string(language),
           prefix_of(catalog, language)};

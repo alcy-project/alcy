@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <functional>
 #include <initializer_list>
 #include <string>
 #include <string_view>
@@ -10,9 +11,30 @@
 #include <utility>
 #include <vector>
 
+#include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 
 namespace ssg {
+
+// Lookups take string_views from page templates and translated labels;
+// hashing the spelling directly keeps those lookups allocation-free.
+struct StringHash {
+  using is_transparent = void;
+  usize operator()(std::string_view value) const noexcept {
+    return std::hash<std::string_view>{}(value);
+  }
+};
+
+struct StringEqual {
+  using is_transparent = void;
+  bool operator()(std::string_view left,
+                  std::string_view right) const noexcept {
+    return left == right;
+  }
+};
+
+using StringMap =
+    std::unordered_map<std::string, std::string, StringHash, StringEqual>;
 
 // The site's catalog: one authored JSON file, shared by the client
 // modules (compiled straight into the pages) and by the generator,
@@ -36,11 +58,11 @@ namespace ssg {
 struct Catalog {
   std::vector<std::string> languages;
   std::string default_language;
-  std::unordered_map<std::string, std::string> language_names;
+  StringMap language_names;
   // The default language's message table. Unordered: lookups are by
   // key, and the catalog file's own order carries no meaning.
-  std::unordered_map<std::string, std::string> messages;
-  std::unordered_map<std::string, std::unordered_map<std::string, std::string>>
+  StringMap messages;
+  std::unordered_map<std::string, StringMap, StringHash, StringEqual>
       per_language;
 };
 
