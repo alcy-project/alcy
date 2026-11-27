@@ -930,15 +930,29 @@ ir::OperandIdx emit_block(const ast::AstArena& ast,
               ir::Operand::from_register(loaded, pointee)));
           ops.push(emitter.builder().operand(
               ir::Operand{emitter.builder().state().operands[stored.idx]}));
+          ir::Opcode compound = ir::Opcode::Noop;
+          switch (reassign.op) {
+            case ast::BinaryOp::Add: compound = ir::Opcode::IntAdd; break;
+            case ast::BinaryOp::Sub: compound = ir::Opcode::IntSub; break;
+            case ast::BinaryOp::Mul: compound = ir::Opcode::IntMul; break;
+            case ast::BinaryOp::BitAnd: compound = ir::Opcode::And; break;
+            case ast::BinaryOp::BitOr: compound = ir::Opcode::Or; break;
+            case ast::BinaryOp::BitXor: compound = ir::Opcode::Xor; break;
+            default: break;
+          }
+          if (compound == ir::Opcode::Noop) {
+            emitter.restore_locals(saved_locals);
+            return ir::OperandIdx(base::INVALID_IDX);
+          }
           const ir::RegisterIdx dst(emitter.builder().state().registers.size());
-          const ir::InstructionIdx add =
-              emitter.builder().instr({.op = ir::Opcode::IntAdd,
+          const ir::InstructionIdx arithmetic =
+              emitter.builder().instr({.op = compound,
                                        .flags = {},
                                        .dst = dst,
                                        .measure = pointee,
                                        .operands = ops.finish()});
-          emitter.builder().reg({.type = pointee, .def_idx = add});
-          emitter.cur().push(add);
+          emitter.builder().reg({.type = pointee, .def_idx = arithmetic});
+          emitter.cur().push(arithmetic);
           stored = emitter.builder().operand(
               ir::Operand::from_register(dst, pointee));
         }
@@ -2209,14 +2223,14 @@ ir::OperandIdx emit_cast(const ast::AstArena& ast,
 // scrutinee is a semantic CompVal (enum, struct, tuple, literal) rather
 // than a lowered register, so the branch can be resolved without IR
 // control flow. `bind` receives each payload name and its operand.
-template <typename Bind>
-bool semantic_pattern_matches(const ast::AstArena& ast,
-                              ast::PatternIdx pattern,
-                              const comp::CompVal& value,
-                              ConstEmitter& emitter,
-                              const EmitContext& ctx,
-                              const ParamEnv* params,
-                              Bind&& bind) {
+bool semantic_pattern_matches(
+    const ast::AstArena& ast,
+    ast::PatternIdx pattern,
+    const comp::CompVal& value,
+    ConstEmitter& emitter,
+    const EmitContext& ctx,
+    const ParamEnv* params,
+    const std::function<void(std::string_view, ir::OperandIdx)>& bind) {
   const ast::PatternNode& pat = ast.patterns[pattern];
   switch (pat.kind) {
     case ast::PatternKind::Wildcard: return true;
@@ -2318,6 +2332,50 @@ bool semantic_pattern_matches(const ast::AstArena& ast,
         }
       }
       return true;
+    }
+    case ast::PatternKind::Struct: {
+      if (value.value.tag != comp::CompValue::Tag::Struct) {
+        return false;
+      }
+      const ir::StructType& shape =
+          emitter.builder().state().struct_types
+              [emitter.builder().state().types[value.type].as_struct()];
+      for (const ast::FieldPattern& field : pat.payload.strukt.fields) {
+        u32 index = 0;
+        if (!ctx.field_index(value.type, field.name.name, index) ||
+            index >= value.value.fields.size() ||
+            index >= shape.fields.size()) {
+          return false;
+        }
+        comp::CompVal field_value;
+        field_value.value = value.value.fields[index];
+        field_value.type = ir::TypeIdx(shape.fields.head().idx + index);
+        if (!semantic_pattern_matches(ast, field.pattern, field_value, emitter,
+                                      ctx, params, bind)) {
+          return false;
+        }
+      }
+      return true;
+    }
+    case ast::PatternKind::Ref:
+      return semantic_pattern_matches(ast, pat.payload.ref.inner, value,
+                                      emitter, ctx, params, bind);
+    case ast::PatternKind::Or: {
+      for (ast::PatternIdx alternative : pat.payload.or_pat.alternatives) {
+        std::vector<std::pair<std::string_view, ir::OperandIdx>> pending;
+        const bool matched = semantic_pattern_matches(
+            ast, alternative, value, emitter, ctx, params,
+            [&](std::string_view name, ir::OperandIdx op) {
+              pending.emplace_back(name, op);
+            });
+        if (matched) {
+          for (const auto& [name, op] : pending) {
+            bind(name, op);
+          }
+          return true;
+        }
+      }
+      return false;
     }
     default: return false;
   }
@@ -4288,6 +4346,19 @@ static ir::OperandIdx emit_unary_expr(const ast::AstArena& ast,
     bool inner_bool = false;
     if (operand_bool(emitter, inner, inner_bool)) {
       return bool_immutable(emitter, type, !inner_bool);
+    }
+  }
+  // Aggregates read their elements immutably, so a negated constant has
+  // to fold here instead of arriving as a register.
+  if (unary.op == ast::UnaryOp::Neg) {
+    u64 bits = 0;
+    if (operand_int(emitter, inner, bits)) {
+      const ir::TypeTag tag = emitter.builder().state().types[type].tag;
+      comp::CompVal folded;
+      folded.type = type;
+      folded.value.tag = comp::CompValue::Tag::Int;
+      folded.value.int_value = (0 - bits) & comp::mask(tag);
+      return emitter.add_value(folded, type);
     }
   }
   if (unary.op == ast::UnaryOp::Neg || unary.op == ast::UnaryOp::Not) {

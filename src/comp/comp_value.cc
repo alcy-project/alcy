@@ -16,7 +16,8 @@ namespace comp {
 
 bool is_signed(ir::TypeTag tag) {
   return tag == ir::TypeTag::I8 || tag == ir::TypeTag::I16 ||
-         tag == ir::TypeTag::I32 || tag == ir::TypeTag::I64;
+         tag == ir::TypeTag::I32 || tag == ir::TypeTag::I64 ||
+         tag == ir::TypeTag::Isize;
 }
 
 u32 int_bytes(ir::TypeTag tag) {
