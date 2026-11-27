@@ -54,6 +54,7 @@ enum class DiagCode : u8 {
   InlineMalformed = 23,
   InlineUnknown = 24,
   InlineNotOnFunction = 25,
+  WhenTargetIsInteger = 26,
 };
 
 }  // namespace parser

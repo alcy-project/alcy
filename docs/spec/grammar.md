@@ -89,8 +89,9 @@ includes the item in the build if `EXPR` is true and drops it otherwise, before
 anything resolves a name. The excluded item's names are nothing to the module:
 resolution, checking, and emission never see it, and its absence is never
 diagnosed. `EXPR` is a boolean expression over the build descriptor —
-`target.os`, `target.arch`, `target.freestanding`, and `testing` — with `==`,
-`!=`, `&&`, `||`, `!`, and parentheses. `testing` is true only for `alcy test`.
+`target.os`, `target.arch`, `target.width`, `target.freestanding`, and
+`testing` — with `==`, `!=`, `&&`, `||`, `!`, and parentheses. `testing` is
+true only for `alcy test`.
 The descriptor's values are the ones the invocation knows: a name outside its
 set is a diagnostic with the known set listed, not a check that quietly answers
 false. Multiple attributes conjunct, and the attribute applies to `use`,

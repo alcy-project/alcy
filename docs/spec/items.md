@@ -150,14 +150,16 @@ frames. Direct backends do no optimization and ignore the setting.
   selects items.
 
 - `EXPR` is a boolean expression over the build descriptor —
-  `target.os`, `target.arch`, `target.freestanding`, and `testing` —
-  with `==`, `!=`, `&&`, `||`, `!`, and parentheses. The descriptor's
-  values are the ones the invocation knows, and it knows all of them:
+  `target.os`, `target.arch`, `target.width`, `target.freestanding`, and
+  `testing` — with `==`, `!=`, `&&`, `||`, `!`, and parentheses. The
+  descriptor's values are the ones the invocation knows, and it knows all
+  of them:
 
   | key | values |
   | --- | --- |
   | `target.os` | `linux`, `darwin`, `windows`, `wasi`, `unknown` |
   | `target.arch` | `x86_64`, `aarch64`, `riscv64`, `wasm32`, `unknown` |
+  | `target.width` | `32`, `64`; the target's address width |
   | `target.freestanding` | boolean |
   | `testing` | boolean; true only for `alcy test` |
 
@@ -170,8 +172,9 @@ frames. Direct backends do no optimization and ignore the setting.
   `unknown` is the value for a target the toolchain does not know, so
   an unrecognized target answers the comparisons with `unknown` and
   loses no arm silently. A value outside the known set of the key is a
-  diagnostic that lists the set; a value that is a string where a
-  boolean belongs, or the reverse, is a diagnostic of its own.
+  diagnostic that lists the set; a value of the wrong kind for the key is
+  a diagnostic of its own. `target.width` names the target's address
+  width directly; it is not shorthand for `size_of::<usize>()`.
 
 - A `when` gate closed on a name is a promise that the name exists on
   the other platform arms too: one arm per OS, all spelling the same

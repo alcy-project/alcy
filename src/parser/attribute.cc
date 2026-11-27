@@ -29,9 +29,14 @@ constexpr std::string_view KNOWN_OS_VALUES =
     "linux, darwin, windows, wasi, unknown";
 constexpr std::string_view KNOWN_ARCH_VALUES =
     "x86_64, aarch64, riscv64, wasm32, unknown";
+constexpr std::string_view KNOWN_WIDTH_VALUES = "32, 64";
 
-BuildFacts facts_for(std::string_view triple, bool freestanding, bool testing) {
+BuildFacts facts_for(std::string_view triple,
+                     u32 width_bits,
+                     bool freestanding,
+                     bool testing) {
   BuildFacts facts;
+  facts.width_bits = width_bits;
   facts.freestanding = freestanding;
   facts.testing = testing;
   if (triple.find("windows") != std::string_view::npos ||
@@ -76,14 +81,14 @@ bool list_contains(std::string_view list, std::string_view word) {
   return false;
 }
 
-// One value the gate reads: a boolean or a string, nothing else. A
-// value that came straight from `target.<key>` remembers which one, and
-// where it sat, so a literal compared against it is named in the
-// diagnostic.
+// One value the gate reads: a boolean, a string, or an integer. A value
+// that came straight from `target.<key>` remembers which one, and where it
+// sat, so a literal compared against it is named in the diagnostic.
 struct Value {
-  enum class Kind : u8 { Boolean, String } kind;
+  enum class Kind : u8 { Boolean, String, Integer } kind;
   bool boolean = false;
   std::string string;
+  u64 integer = 0;
   std::string_view target_key;
   diag::Span span;
 
@@ -104,6 +109,17 @@ struct Value {
     Value value;
     value.kind = Kind::String;
     value.string = std::move(string);
+    value.target_key = key;
+    value.span = span;
+    return value;
+  }
+
+  static Value make_integer(u64 integer,
+                            std::string_view key,
+                            diag::Span span) {
+    Value value;
+    value.kind = Kind::Integer;
+    value.integer = integer;
     value.target_key = key;
     value.span = span;
     return value;
@@ -175,6 +191,14 @@ void emit_target_is_string(diag::DiagBag& bag,
                            std::string_view key) {
   const u32 index = bag.emit<i18n::Key::ParserWhenTargetIsString>(
       DiagCode::WhenTargetIsString, span, key);
+  (void)index;
+}
+
+void emit_target_is_integer(diag::DiagBag& bag,
+                            diag::Span span,
+                            std::string_view key) {
+  const u32 index = bag.emit<i18n::Key::ParserWhenTargetIsInteger>(
+      DiagCode::WhenTargetIsInteger, span, key);
   (void)index;
 }
 
@@ -291,20 +315,38 @@ struct Evaluator {
       } else if ((right_key == "os" || right_key == "arch") &&
                  left_key.empty()) {
         emit_target_is_string(bag, left->span, right_key);
+      } else if (left_key == "width" && right_key.empty()) {
+        emit_target_is_integer(bag, right->span, left_key);
+      } else if (right_key == "width" && left_key.empty()) {
+        emit_target_is_integer(bag, left->span, right_key);
       } else {
         emit_not_boolean(bag, token_at(cursor));
       }
       broken = true;
       return std::nullopt;
     }
-    const bool equal = left->kind == Value::Kind::Boolean
-                           ? left->boolean == right->boolean
-                           : left->string == right->string;
+    const bool equal =
+        left->kind == Value::Kind::Boolean   ? left->boolean == right->boolean
+        : left->kind == Value::Kind::Integer ? left->integer == right->integer
+                                             : left->string == right->string;
     return Value::make_boolean(kind == lexer::TokenKind::EqEq ? equal : !equal,
                                {}, diag::Span{source::UNKNOWN_FILE, 0, 0});
   }
 
   void validate_literal(const Value& target_side, const Value& literal_side) {
+    if (target_side.target_key == "width") {
+      if (literal_side.kind != Value::Kind::Integer) {
+        return;
+      }
+      if (literal_side.integer == 32 || literal_side.integer == 64) {
+        return;
+      }
+      emit_unknown_value(bag, literal_side.span,
+                         std::to_string(literal_side.integer), "width",
+                         KNOWN_WIDTH_VALUES);
+      broken = true;
+      return;
+    }
     if (target_side.target_key != "os" && target_side.target_key != "arch") {
       return;
     }
@@ -363,6 +405,17 @@ struct Evaluator {
         advance(cursor);
         return Value::make_string(spelling_of(token, bytes), {}, token.span);
       }
+      case lexer::TokenKind::Integer: {
+        advance(cursor);
+        u64 value = 0;
+        for (const char ch : spelling_of(token, bytes)) {
+          if (ch < '0' || ch > '9') {
+            break;
+          }
+          value = value * 10 + static_cast<u64>(ch - '0');
+        }
+        return Value::make_integer(value, {}, token.span);
+      }
       case lexer::TokenKind::Ident: {
         const std::string spelling = spelling_of(token, bytes);
         // `testing` names the invocation mode, not a target property,
@@ -396,6 +449,9 @@ struct Evaluator {
         if (name == "arch") {
           return Value::make_string(std::string(facts.arch), "arch", key.span);
         }
+        if (name == "width") {
+          return Value::make_integer(facts.width_bits, "width", key.span);
+        }
         if (name == FREESTANDING) {
           return Value::make_boolean(facts.freestanding, FREESTANDING,
                                      key.span);
@@ -415,9 +471,10 @@ struct Evaluator {
 }  // namespace
 
 BuildFacts build_facts(std::string_view triple,
+                       u32 width_bits,
                        bool freestanding,
                        bool testing) {
-  return facts_for(triple, freestanding, testing);
+  return facts_for(triple, width_bits, freestanding, testing);
 }
 
 GateOutcome evaluate_when(std::span<const lexer::Token> inside,

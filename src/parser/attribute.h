@@ -18,6 +18,9 @@ namespace parser {
 struct BuildFacts {
   std::string_view os = "unknown";
   std::string_view arch = "unknown";
+  // The target's address width in bits, supplied by the run rather than
+  // inferred from the architecture.
+  u32 width_bits = 64;
   bool freestanding = false;
   // Whether this invocation builds a test: `alcy test` sets it, every
   // other command leaves it false. The gate name is `testing` at top
@@ -30,6 +33,7 @@ struct BuildFacts {
 // no platform arm silently: the `when` gate evaluates `unknown` as the
 // value and the source's unknown arms are the ones that survive.
 BuildFacts build_facts(std::string_view triple,
+                       u32 width_bits,
                        bool freestanding,
                        bool testing);
 

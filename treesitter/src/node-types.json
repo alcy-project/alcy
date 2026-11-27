@@ -472,6 +472,10 @@
           "named": true
         },
         {
+          "type": "integer",
+          "named": true
+        },
+        {
           "type": "layout_setting",
           "named": true
         },

@@ -27,6 +27,7 @@
 #include "fpag/mem/arena.h"
 #include "fpag/mem/page_allocator.h"
 #include "i18n/messages.h"
+#include "ir/type.h"
 #include "lexer/lexer.h"
 #include "lexer/token.h"
 #include "parser/attribute.h"
@@ -88,8 +89,9 @@ bool parse_one(PipelineContext& ctx,
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, "tokenize", "frontend");
     lexer.tokenize(tokens);
   }
-  const parser::BuildFacts facts =
-      parser::build_facts(ctx.target.triple, ctx.freestanding, ctx.testing);
+  const u32 width_bits = ctx.target.width == ir::PointerWidth::W64 ? 64u : 32u;
+  const parser::BuildFacts facts = parser::build_facts(
+      ctx.target.triple, width_bits, ctx.freestanding, ctx.testing);
   parser::Parser parser(
       std::span<const lexer::Token>(tokens.data(), tokens.size()), bytes,
       file.id, ctx.ast, bag, facts);

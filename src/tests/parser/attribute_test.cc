@@ -36,6 +36,7 @@ constexpr parser::BuildFacts WINDOWS_X86_64{.os = "windows",
                                             .freestanding = false};
 constexpr parser::BuildFacts WASI_WASM32{.os = "wasi",
                                          .arch = "wasm32",
+                                         .width_bits = 32,
                                          .freestanding = false};
 constexpr parser::BuildFacts LINUX_FREESTANDING{.os = "linux",
                                                 .arch = "x86_64",
@@ -112,6 +113,46 @@ TEST_CASE("The arch axis selects on the target's architecture") {
       "#[when(target.arch == \"wasm32\")]\nfn x() -> i32 { ret 1 }\n",
       WASI_WASM32, g);
   CHECK(s.items.size() == 1);
+}
+
+TEST_CASE("The width axis selects on the target's address width") {
+  Fixture wide;
+  ParseResult r =
+      parse_with("#[when(target.width == 64)]\nfn x() -> i32 { ret 1 }\n",
+                 LINUX_X86_64, wide);
+  CHECK(r.items.size() == 1);
+  Fixture narrow;
+  ParseResult s =
+      parse_with("#[when(target.width == 64)]\nfn x() -> i32 { ret 1 }\n",
+                 WASI_WASM32, narrow);
+  CHECK(s.items.size() == 0);
+  Fixture narrow_arm;
+  ParseResult t =
+      parse_with("#[when(target.width == 32)]\nfn x() -> i32 { ret 1 }\n",
+                 WASI_WASM32, narrow_arm);
+  CHECK(t.items.size() == 1);
+}
+
+TEST_CASE("An unknown address width is refused with the known set") {
+  Fixture f;
+  ParseResult r =
+      parse_with("#[when(target.width == 16)]\nfn x() -> i32 { ret 1 }\n",
+                 LINUX_X86_64, f);
+  (void)r;
+  CHECK(has_message(f.bag,
+                    "Unknown value `16` for `target.width`; the known values "
+                    "are 32, 64"));
+}
+
+TEST_CASE("A string compared to the address width is refused") {
+  Fixture f;
+  ParseResult r =
+      parse_with("#[when(target.width == \"64\")]\nfn x() -> i32 { ret 1 }\n",
+                 LINUX_X86_64, f);
+  (void)r;
+  CHECK(has_message(f.bag,
+                    "`target.width` is an integer; compare it to one of the "
+                    "known values"));
 }
 
 TEST_CASE("The freestanding axis selects on the build flag") {
@@ -208,7 +249,7 @@ TEST_CASE("An unknown target key is refused with the known keys") {
   (void)r;
   CHECK(has_message(f.bag,
                     "Unknown `target` argument `moon`; the known arguments are "
-                    "`os`, `arch`, and `freestanding`"));
+                    "`os`, `arch`, `width`, and `freestanding`"));
 }
 
 TEST_CASE("A non-boolean condition is refused") {

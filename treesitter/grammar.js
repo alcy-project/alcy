@@ -186,6 +186,7 @@ module.exports = grammar({
     _when_primary: $ => choice(
       seq('(', $._when_expr, ')'),
       $.string,
+      $.integer,
       $.boolean,
       prec(1, $.identifier),
       $._target_key,

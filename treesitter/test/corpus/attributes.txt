@@ -25,6 +25,32 @@ fn present() -> i32 {
         (integer)))))
 
 ================================================================================
+An item gated on the target address width
+================================================================================
+
+#[when(target.width == 64)]
+fn present() -> i32 {
+  ret 0
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (attribute
+    (identifier)
+    (identifier)
+    (identifier)
+    (integer))
+  (function_item
+    (identifier)
+    (parameters)
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (integer)))))
+
+================================================================================
 A struct fixed to the C layout
 ================================================================================
 

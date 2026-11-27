@@ -51,12 +51,12 @@ when_cmp    = when_unary , [ ( "==" | "!=" ) , when_unary ] ;
               (* A comparison binds looser than `!` and binds one pair at
                  most; operands must agree in kind, and a string literal
                  compared against `target.<key>` must name a value the
-                 key knows. *)
+                 key knows; `target.width` takes an integer. *)
 when_unary  = "!" , when_unary | when_primary ;
-when_primary = "(" , when_or , ")" | string | "true" | "false" | target_key | "testing" ;
+when_primary = "(" , when_or , ")" | string | integer | "true" | "false" | target_key | "testing" ;
               (* `testing` is a bare boolean from the invocation mode:
                  true only for `alcy test`, not a property of the target. *)
-target_key  = "target" , "." , ( "os" | "arch" | "freestanding" ) ;
+target_key  = "target" , "." , ( "os" | "arch" | "width" | "freestanding" ) ;
 vis         = "pub" ;
 fn_item     = [ "unsafe" ] , [ "comp" ] , "fn" , IDENT , [ type_params ] , "(" , [ params ] , ")"
             , [ "->" , type ] , block ;
