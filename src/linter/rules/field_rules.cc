@@ -32,10 +32,8 @@ void UnusedField::run(LintContext& ctx) {
   if (ctx.field_usage == nullptr) {
     return;
   }
-  // The fields the module reads. The list is small, so sorting once and
-  // searching each candidate is cheaper than a hash table.
-  std::vector<std::string_view> read = ctx.field_usage->names;
-  std::sort(read.begin(), read.end());
+  // The engine sorted the field names once before any rule ran.
+  const std::span<const std::string_view> read = ctx.field_usage->names;
 
   // The struct fields the module declares. A pub field is the package's
   // surface; the struct's own pub does not make every field one.

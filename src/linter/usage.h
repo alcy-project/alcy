@@ -14,6 +14,8 @@ namespace linter {
 // path of its own, so one table answers both.
 struct NameUsage {
   std::vector<std::string_view> names;
+  // The engine sorts the table before any rule reads it.
+  bool sorted = false;
 };
 
 // The field names the module reads, in traversal order: a `.name`
@@ -22,6 +24,7 @@ struct NameUsage {
 // not recorded; that is the distinction unused-field reports on.
 struct FieldUsage {
   std::vector<std::string_view> names;
+  bool sorted = false;
 };
 
 // The variant names the package's value paths name, in traversal order:
@@ -31,6 +34,7 @@ struct FieldUsage {
 // unused-variant reads it.
 struct VariantUsage {
   std::vector<std::string_view> names;
+  bool sorted = false;
 };
 
 }  // namespace linter

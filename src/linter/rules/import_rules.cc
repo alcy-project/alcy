@@ -61,11 +61,9 @@ void UnusedImport::run(LintContext& ctx) {
   if (ctx.usage_index == nullptr) {
     return;
   }
-  // The heads the walk recorded. The imports are few, so sorting once
-  // and binary-searching each name is cheaper than a hash table.
-  std::vector<std::string_view> used = ctx.usage_index->names;
-  std::sort(used.begin(), used.end());
-  used.erase(std::unique(used.begin(), used.end()), used.end());
+  // The engine sorted the heads once before any rule ran. Duplicates
+  // do not change a binary-search answer, so no copy is needed here.
+  const std::span<const std::string_view> used = ctx.usage_index->names;
 
   struct Use {
     ast::ItemIdx item;

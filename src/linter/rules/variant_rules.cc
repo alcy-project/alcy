@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include <algorithm>
+#include <span>
 #include <string_view>
 #include <vector>
 
@@ -31,11 +32,8 @@ void UnusedVariant::run(LintContext& ctx) {
   if (ctx.variant_usage == nullptr) {
     return;
   }
-  // The variant names the package constructs. The list is small, so
-  // sorting once and searching each candidate is cheaper than a hash
-  // table.
-  std::vector<std::string_view> used = ctx.variant_usage->names;
-  std::sort(used.begin(), used.end());
+  // The engine sorted the variant names once before any rule ran.
+  const std::span<const std::string_view> used = ctx.variant_usage->names;
 
   // The variants of the module's private enums. A pub enum is the
   // package's surface: another package may construct every variant, and

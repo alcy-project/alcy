@@ -3,6 +3,7 @@
 
 #include "linter/engine.h"
 
+#include <algorithm>
 #include <array>
 #include <span>
 #include <string_view>
@@ -201,11 +202,13 @@ LintStats run_lints(pipeline::PipelineContext& ctx,
       }
       if (usage_here) {
         usage.names.clear();
+        usage.sorted = false;
         lint.usage_index = &usage;
       }
     }
     if (needs_field_usage) {
       fields.names.clear();
+      fields.sorted = false;
       lint.field_usage = &fields;
     }
     if (walk || usage_here || lint.field_usage != nullptr ||
@@ -221,6 +224,20 @@ LintStats run_lints(pipeline::PipelineContext& ctx,
         module_visitor.variant_read = &collect_variant_read;
       }
       walk_module(lint, module_visitor);
+    }
+    // One sort per table, before any rule reads it: the three unused-*
+    // rules used to copy and sort the same names for themselves.
+    if (usage_here && !usage.sorted) {
+      std::sort(usage.names.begin(), usage.names.end());
+      usage.sorted = true;
+    }
+    if (lint.field_usage != nullptr && !fields.sorted) {
+      std::sort(fields.names.begin(), fields.names.end());
+      fields.sorted = true;
+    }
+    if (lint.variant_usage != nullptr && !variants.sorted) {
+      std::sort(variants.names.begin(), variants.names.end());
+      variants.sorted = true;
     }
     for (const Rule* rule : run_rules) {
       lint.rule = rule;
