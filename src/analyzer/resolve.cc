@@ -102,6 +102,7 @@ class Resolver {
   std::vector<ModuleNode*> modules;
   std::vector<u32> parents;
   std::vector<std::vector<NameEntry>> local_types;
+  std::vector<std::vector<NameEntry>> local_specs;
   std::vector<std::vector<NameEntry>> local_values;
   std::vector<std::vector<NameEntry>> local_modules;
   std::vector<std::vector<Import>> module_imports;
@@ -158,6 +159,7 @@ class Resolver {
     modules.push_back(node);
     parents.push_back(parent);
     local_types.emplace_back();
+    local_specs.emplace_back();
     local_values.emplace_back();
     local_modules.emplace_back();
     module_imports.emplace_back();
@@ -515,7 +517,7 @@ class Resolver {
             break;
           }
           case I::Spec: {
-            local_types[m].push_back(NameEntry{name});
+            local_specs[m].push_back(NameEntry{name});
             break;
           }
           case I::Fn:
@@ -557,6 +559,9 @@ class Resolver {
       for (const NameEntry& entry : local_types[m]) {
         own_names[m].insert(NameKey{entry.name, Namespace::Type});
       }
+      for (const NameEntry& entry : local_specs[m]) {
+        own_names[m].insert(NameKey{entry.name, Namespace::Spec});
+      }
       for (const NameEntry& entry : local_values[m]) {
         own_names[m].insert(NameKey{entry.name, Namespace::Value});
       }
@@ -580,13 +585,13 @@ class Resolver {
         }
         const std::string_view name = node.name();
         using I = ast::ItemKind;
-        const Namespace namespaces[] = {Namespace::Type, Namespace::Value,
-                                        Namespace::Module};
+        const Namespace namespaces[] = {Namespace::Type, Namespace::Spec,
+                                        Namespace::Value, Namespace::Module};
         for (Namespace ns : namespaces) {
           const bool declared =
               (ns == Namespace::Type &&
-               (node.kind == I::Struct || node.kind == I::Enum ||
-                node.kind == I::Spec)) ||
+               (node.kind == I::Struct || node.kind == I::Enum)) ||
+              (ns == Namespace::Spec && node.kind == I::Spec) ||
               (ns == Namespace::Value &&
                (node.kind == I::Struct || node.kind == I::Enum ||
                 node.kind == I::Fn || node.kind == I::Intrinsic ||
@@ -677,6 +682,13 @@ class Resolver {
     exports_state[module] = 2;
   }
 
+  const std::vector<NameEntry>& names_in(u32 module, Namespace ns) const {
+    return ns == Namespace::Type    ? local_types[module]
+           : ns == Namespace::Spec  ? local_specs[module]
+           : ns == Namespace::Value ? local_values[module]
+                                    : local_modules[module];
+  }
+
   void add_import(u32 module,
                   ast::ItemIdx use,
                   std::string_view name,
@@ -684,10 +696,7 @@ class Resolver {
                   u32 target,
                   std::string_view member) {
     const ast::ItemNode& use_node = ast.items[use];
-    if (has_name(ns == Namespace::Type    ? local_types[module]
-                 : ns == Namespace::Value ? local_values[module]
-                                          : local_modules[module],
-                 name)) {
+    if (has_name(names_in(module, ns), name)) {
       const u32 index = bag.emit<i18n::Key::AnalyzerConflictsWithLocalItem>(
           DiagCode::AmbiguousImport, use_node.span, name);
       (void)index;
@@ -716,10 +725,7 @@ class Resolver {
   }
 
   bool lookup_local(u32 module, std::string_view member, Namespace ns) const {
-    return has_name(ns == Namespace::Type    ? local_types[module]
-                    : ns == Namespace::Value ? local_values[module]
-                                             : local_modules[module],
-                    member);
+    return has_name(names_in(module, ns), member);
   }
 
   // The item that declares `member` in `module`'s `ns` namespace, or an
@@ -734,8 +740,8 @@ class Resolver {
     for (ast::ItemIdx item : modules[module]->items) {
       const ast::ItemNode& node = ast.items[item];
       const bool in_ns = (ns == Namespace::Type &&
-                          (node.kind == I::Struct || node.kind == I::Enum ||
-                           node.kind == I::Spec)) ||
+                          (node.kind == I::Struct || node.kind == I::Enum)) ||
+                         (ns == Namespace::Spec && node.kind == I::Spec) ||
                          (ns == Namespace::Value &&
                           (node.kind == I::Struct || node.kind == I::Enum ||
                            node.kind == I::Fn || node.kind == I::Intrinsic ||
@@ -889,7 +895,7 @@ class Resolver {
     std::string_view final_member;
     // A struct or enum name occupies the type and value namespaces alike.
     const Namespace namespaces[] = {Namespace::Module, Namespace::Type,
-                                    Namespace::Value};
+                                    Namespace::Spec, Namespace::Value};
     for (Namespace ns : namespaces) {
       if (!lookup_local(current, member, ns)) {
         continue;

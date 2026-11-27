@@ -122,7 +122,7 @@ SpecEntry* Checker::find_spec_in_scope(u32 module, std::string_view name) {
     return entry;
   }
   for (const Import& import : tree.modules[module]->imports) {
-    if (import.ns != Namespace::Type || import.name != name) {
+    if (import.ns != Namespace::Spec || import.name != name) {
       continue;
     }
     if (SpecEntry* target = find_spec(import.target_module, import.member)) {
@@ -162,7 +162,7 @@ bool Checker::spec_in_scope(u32 module, const SpecEntry& spec) {
     }
   }
   for (const Import& import : tree.modules[module]->imports) {
-    if (import.ns != Namespace::Type) {
+    if (import.ns != Namespace::Spec) {
       continue;
     }
     if (import.target_module == spec.module && import.member == spec.name) {
@@ -556,12 +556,6 @@ bool Checker::has_display(ir::TypeIdx type, u32 module) {
 void Checker::register_spec(u32 module, ast::ItemIdx item) {
   const ast::ItemNode& node = ast.items[item];
   const ast::ItemSpec& spec = node.payload.get<ast::ItemSpec>();
-  if (find_nominal(module, spec.name.name) != nullptr) {
-    const u32 index = bag.emit<i18n::Key::AnalyzerDuplicateDefinition>(
-        DiagCode::DuplicateDefinition, spec.name.span, spec.name.name);
-    (void)index;
-    return;
-  }
   if (find_spec(module, spec.name.name) != nullptr) {
     const u32 index = bag.emit<i18n::Key::AnalyzerDuplicateDefinition>(
         DiagCode::DuplicateDefinition, spec.name.span, spec.name.name);

@@ -32,7 +32,7 @@
   it, and a witness is synthesized from the target's structure.
   `core` declares `Copy` (a value's bytes can be copied) and
   `Zeroable` (all-zero bytes spell a valid value) this way. Specs
-  live in the type namespace:
+  live in their own namespace, beside types, values and modules:
   `use` imports them and a prelude facade re-exports core's, which is
   what puts a spec's methods on a call — dispatch tries inherent
   methods first, then the in-scope spec impls. Coherence is global

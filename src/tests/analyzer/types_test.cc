@@ -1139,6 +1139,30 @@ TEST_CASE("Check accepts reference cycles") {
   CHECK(result.package.has_value());
 }
 
+TEST_CASE("A spec and a struct may share a name") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "spec Box { fn get(self: &Self) -> i32; }\n"
+                       "struct Box { n: i32 }\n"
+                       "impl Box for Box {\n"
+                       "  fn get(self: &Self) -> i32 { ret self.n }\n"
+                       "}\n"
+                       "fn read<M: Box>(m: &M) -> i32 { ret m.get() }\n"
+                       "fn main() -> i32 {\n"
+                       "  b := Box { n: 7 }\n"
+                       "  ret read(&b)\n"
+                       "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
 TEST_CASE("Check rejects duplicate definitions") {
   VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",

@@ -28,7 +28,9 @@
   `_`. There is no parent-relative spelling: every upward reference
   names the root.
 - `use a::b;`, `use a::b as c;`, and `pub use` re-exports are part
-  of the language.
+  of the language. An import resolves the name through modules, types,
+  specs and values in that order, importing a name found in each; two
+  explicit imports under one name in one namespace remain ambiguous.
   Glob imports (`::*`) are deferred.
 - Default visibility is private: a declaration is reachable only from the module
   that declares it. `pub` opens it to every module of the package; reaching it
@@ -39,8 +41,11 @@
   method, as does an associated const; a spec method follows its spec, and an
   enum's variants follow the enum. There is no `priv` keyword. Restricted
   visibility (`pub(...)`) is deferred.
-- Three namespaces exist: types, values, and modules. A struct name
-  may denote both its type and its constructor expressions.
+- Four namespaces exist: types, specs, values, and modules. A struct
+  name may denote both its type and its constructor expressions. A
+  spec name occupies its own namespace, so a capability and a
+  concrete type may share a spelling: a type position names the type,
+  and a bound (`M: Name`) names the spec.
 - Resolution order is lexical scope, then module, then the core
   prelude. Ambiguity is a compile-time error. An explicit `use`
   shadows the implicit surface's name, so a name the prelude already

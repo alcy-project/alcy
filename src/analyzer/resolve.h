@@ -25,9 +25,11 @@
 namespace analyzer {
 
 // Name namespaces. Structs and enums occupy Type and Value alike
-// (the type and its constructors); functions, statics, and constants
-// occupy Value; submodules occupy Module.
-enum class Namespace : u8 { Type, Value, Module };
+// (the type and its constructors); specs occupy Spec, so a capability
+// and a concrete type may share a name and resolve by position;
+// functions, statics, and constants occupy Value; submodules occupy
+// Module.
+enum class Namespace : u8 { Type, Spec, Value, Module };
 
 // A resolved import: `name` in this module refers to `member` of the
 // module at `target_module`. Re-export chains are already chased to
