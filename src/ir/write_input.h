@@ -80,7 +80,9 @@ struct WriteInput {
 //
 // The canonical bytes are: for each file row, in order, the name's bytes,
 // one 0x00, and the hash as sixteen little-endian bytes; then one byte for
-// the pointer width (4 or 8); then the version string's bytes.
+// the pointer width (4 or 8), the two IR format version numbers, and the
+// version string's bytes. A format change invalidates a cache written by
+// the old reader even when the compiler version did not change.
 //
 // The profile is not in it: the unoptimized forms answer the same
 // artifact under every profile, so a cache that keys a
@@ -98,6 +100,8 @@ inline base::Digest128 identity_digest(const FileTable& files,
     canonical.insert(canonical.end(), hash.begin(), hash.end());
   }
   canonical.push_back(width == PointerWidth::W32 ? 4 : 8);
+  canonical.push_back(static_cast<u8>(binary::MAJOR));
+  canonical.push_back(static_cast<u8>(binary::MINOR));
   for (const char ch : version) {
     canonical.push_back(static_cast<u8>(ch));
   }
