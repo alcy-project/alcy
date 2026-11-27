@@ -276,6 +276,11 @@ Notes:
 Keep changes focused; avoid mixing refactors with behavior changes unless they
 are inseparable.
 
+A commit is the smallest change to the tree that is complete on its own. Its
+message must make sense to a reader who has none of the context that produced
+it: no review thread, no issue, no agent session, and no CI log. Such a commit
+can be reviewed, reverted, or cherry-picked without a note beside it.
+
 The repository carries Git hooks in `.githooks/`. Enable them once per clone:
 
 ```bash
@@ -342,6 +347,25 @@ The body is optional and says why. A commit that needs more than a handful of
 lines has a message that is too long: put the reasoning in a comment, a test, or
 the specification rather than in the log. A message that has to be read
 carefully to find the point is a message that is too long.
+
+Record no process. The log says what changed in the tree and why, not how the
+change was reached. Review comments, tool runs, test counts, and requests are
+recorded where they happened.
+
+```text
+BAD subject:
+    fix: address review for codegen
+    docs: apply agent suggestions
+
+BAD footer:
+    Verification: e2e 862 cases pass, 1631 unit tests pass
+
+GOOD:
+    fix(codegen): keep the borrow result of a dropped temporary
+
+    The temporary was dropped before lowering read its borrow, so the
+    receiver lost the call's result.
+```
 
 Record no abandoned attempts. Work that left nothing in the tree has nothing to
 point at later, so the log becomes its only trace; if a mistake is worth

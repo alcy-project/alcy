@@ -35,6 +35,12 @@
 
 ## Code Generation & Workflow
 
+- **Commit messages:** One self-contained logical change per commit; the
+  message must read without the review thread, issue, agent session, or CI
+  log. Never narrate process: BAD `fix: address review`, `Verification: e2e
+  862 cases pass`; GOOD `fix(codegen): keep the borrow result of a dropped
+  temporary`. See CONTRIBUTING.md.
+
 - **Boundaries & Build:** Obey `src/*` module boundaries and the linear pipeline
   in `src/docs/architecture.md`. Add license headers and `BUILD.gn` entries to
   all new files. Use English for all code, comments, docs, and commits.
