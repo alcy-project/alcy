@@ -2427,8 +2427,7 @@ class Checker {
     const ir::Function& fn = storage.functions()[fidx];
     // Which parameter a root holds. Only the parameter allocas answer this,
     // so the table is the size of a parameter list rather than of the
-    // register file, which is what the checker used to build once per
-    // function per sweep.
+    // register file.
     const auto param_of = [this](u32 root) -> u32 {
       for (const auto& [alloca, index] : param_homes) {
         if (alloca == root) {

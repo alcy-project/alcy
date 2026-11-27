@@ -26,9 +26,9 @@ enum class Check : u8 {
   MinOverOne,
 };
 
-// One instruction's check for this build. The definitions of
-// stay in the IR; an entry only names the diagnostic a checked build
-// adds.
+// One instruction's check for this build. The definitions of the
+// checks stay in the IR; an entry only names the diagnostic a checked
+// build adds.
 struct Entry {
   Check kind = Check::None;
   // The operand a condition reads when the instruction's own operands

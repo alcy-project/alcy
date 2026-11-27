@@ -19,9 +19,7 @@ namespace text {
 void append_json_string(std::string& out, std::string_view value);
 
 // Appends `value` as a JSON number: decimal digits, no quoting, no
-// locale. Going through the formatter for this rather than formatting by
-// hand keeps the literal braces out of the surrounding raw strings, where
-// a `}` that is not a placeholder is easy to miscount.
+// locale. Every writer goes through here so the spelling cannot drift.
 template <typename T>
 void append_json_number(std::string& out, T value) {
   out += std::to_string(value);

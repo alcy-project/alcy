@@ -101,12 +101,10 @@ std::string block_html(
     const PageOptions& options,
     const std::unordered_map<const Block*, std::string>& heading_ids) {
   const Catalog& catalog = *options.catalog;
-  const bool allow_links = options.resolve_link != nullptr;
   std::string (*link)(std::string_view, void*) = options.resolve_link;
   const auto t = [&catalog, &options](std::string_view key) {
     return translate(catalog, options.language, key);
   };
-  (void)allow_links;
   switch (block.type) {
     case BlockType::Heading: {
       const auto found = heading_ids.find(&block);
@@ -205,7 +203,6 @@ std::string chapter_list(const DocPage& page,
 
 }  // namespace
 // Page-chrome glyphs the stylesheet styles and no catalog translates.
-// The bytes are UTF-8 so this file stays ASCII.
 const std::string MIDDLE_DOT = "\xc2\xb7";
 const std::string ARROW_LEFT = "\xe2\x86\x90";
 const std::string ARROW_RIGHT = "\xe2\x86\x92";

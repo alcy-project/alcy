@@ -710,9 +710,9 @@ class Lowerer {
   void specialization_key(ir::FunctionIdx source,
                           const std::vector<ir::TypeIdx>& args,
                           std::string& key);
-  // The identity of one specialization: the declaration, the
-  // instantiation, the signature, and the comp argument values. Used
-  // where a function is reserved and looked up. It is written into `key` so
+  // The row a reservation names: the declaration, the instantiation,
+  // the signature, and the comp argument values. Used where a function
+  // is reserved and looked up. It is written into `key` so
   // that a caller can hand in storage it reuses: every call site builds one of
   // these. Creates the row a reservation names, so every function's index is
   // decided when it is reserved: a clone or a synthesized body created

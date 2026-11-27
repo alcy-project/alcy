@@ -2,7 +2,8 @@
 
 `alcy` is an AOT C++20 compiler (no interpreter/runtime).
 
-- **Host:** Linux (`x86_64`), macOS (`aarch64`), Windows (`x64`).
+- **Host:** Linux (`x86_64`, `arm64`), macOS (`aarch64`, `x86_64`),
+  Windows (`x64`, `arm64`).
 - **Targets:** Native binaries (LLVM, or `direct-x86_64` for x86_64 Linux
   debug and `direct-riscv64` for riscv64 Linux debug), WASI
   (`--backend=direct-wasm`), `wasm32-unknown-emscripten`.

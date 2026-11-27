@@ -75,13 +75,13 @@ constexpr const char* PATHS[] = {
     "::::",    // only empty segments
     "::a",     // leading separator
     "a::",     // trailing separator
-    "a::b::",  //
+    "a::b::",  // trailing separator
     "a:::b",   // three separators in a row
     "a::b:c",  // a colon inside a segment
-    ":::",     //
+    ":::",     // only empty segments
     "core::mem::io",
     "\xc3\xa9",        // a non-ASCII segment
-    "a::\xc3\xa9::b",  //
+    "a::\xc3\xa9::b",  // non-ASCII segment
     "very::deep::nested::module::path",
 };
 
