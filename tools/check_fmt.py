@@ -22,6 +22,12 @@ bytes, the only case in which the answer could differ.
 
 The corpus is the one the grammar's differential check reads, so the
 two halves of the tree agree about what a source file is.
+
+With --fix the first answer is applied: files whose layout would change
+are rewritten from the same formatting pass the check uses. The second
+and third answers are still required before anything is written, so an
+unstable formatter or one that changes a compiler verdict never edits
+the tree.
 """
 
 import argparse
@@ -115,6 +121,11 @@ def main() -> int:
         action="store_true",
         help="Name every file as it is checked, not only the failures",
     )
+    parser.add_argument(
+        "--fix",
+        action="store_true",
+        help="Write the canonical layout to the sources that would change",
+    )
     args = parser.parse_args()
 
     alcy = alcy_binary(args.build_subdir)
@@ -188,6 +199,17 @@ def main() -> int:
                 )
             if args.verbose:
                 print(f"checked {path.relative_to(project_root_dir)}")
+
+    if args.fix and not moved and not verdict_changed:
+        fixed = 0
+        for path, text in zip(corpus, formatted, strict=True):
+            if text != path.read_bytes():
+                path.write_bytes(text)
+                fixed += 1
+        if fixed:
+            print(f"fmt: wrote the canonical layout to {fixed} source(s)")
+            needs_formatting = []
+        timing.mark("fix")
 
     failed = False
     if needs_formatting:
