@@ -2720,6 +2720,10 @@
           "named": true
         },
         {
+          "type": "const_item",
+          "named": true
+        },
+        {
           "type": "function_item",
           "named": true
         }

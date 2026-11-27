@@ -281,12 +281,19 @@ std::optional<HoverTarget> target_of(const pipeline::PipelineContext& context,
           }
         }
       } else if (item.kind == K::Impl) {
-        for (const ast::ItemIdx method :
-             item.payload.get<ast::ItemImpl>().methods) {
+        const ast::ItemImpl& impl = item.payload.get<ast::ItemImpl>();
+        for (const ast::ItemIdx member : impl.methods) {
           if (same_span(
-                  ::ast::item_name_span(context.ast, context.ast.items[method]),
+                  ::ast::item_name_span(context.ast, context.ast.items[member]),
                   declaration)) {
-            return HoverTarget{method, NO_MEMBER};
+            return HoverTarget{member, NO_MEMBER};
+          }
+        }
+        for (const ast::ItemIdx member : impl.consts) {
+          if (same_span(
+                  ::ast::item_name_span(context.ast, context.ast.items[member]),
+                  declaration)) {
+            return HoverTarget{member, NO_MEMBER};
           }
         }
       }

@@ -302,8 +302,12 @@ class Desugarer {
         break;
       }
       case ast::ItemKind::Impl: {
-        for (ast::ItemIdx method : node.payload.get<ast::ItemImpl>().methods) {
+        const ast::ItemImpl& impl = node.payload.get<ast::ItemImpl>();
+        for (ast::ItemIdx method : impl.methods) {
           visit_item(method);
+        }
+        for (ast::ItemIdx constant : impl.consts) {
+          visit_item(constant);
         }
         break;
       }

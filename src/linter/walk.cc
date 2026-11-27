@@ -416,6 +416,9 @@ void walk_item(LintContext& ctx, ast::ItemIdx item, const Visitor& visitor) {
       for (const ast::ItemIdx method : impl.methods) {
         walk_item(ctx, method, visitor);
       }
+      for (const ast::ItemIdx constant : impl.consts) {
+        walk_item(ctx, constant, visitor);
+      }
       break;
     }
     case K::Static: {

@@ -41,6 +41,9 @@ class Analyzer {
         for (const ast::ItemIdx method : impl.methods) {
           run_item(method);
         }
+        for (const ast::ItemIdx constant : impl.consts) {
+          run_item(constant);
+        }
         break;
       }
       case K::Static: run_expr(node.payload.get<ast::ItemStatic>().init); break;

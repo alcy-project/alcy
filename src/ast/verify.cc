@@ -468,6 +468,11 @@ bool verify_item_children(const ItemNode& node, const AstArena& arena) {
           return false;
         }
       }
+      for (const ItemIdx constant : impl.consts) {
+        if (!bound(constant, arena.items)) {
+          return false;
+        }
+      }
       return true;
     }
     case ItemKind::Spec: {

@@ -1156,7 +1156,7 @@
             "members": [
               {
                 "type": "SYMBOL",
-                "name": "_impl_method"
+                "name": "_impl_member"
               },
               {
                 "type": "SYMBOL",
@@ -1171,7 +1171,7 @@
         }
       ]
     },
-    "_impl_method": {
+    "_impl_member": {
       "type": "SEQ",
       "members": [
         {
@@ -1182,8 +1182,17 @@
           }
         },
         {
-          "type": "SYMBOL",
-          "name": "function_item"
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SYMBOL",
+              "name": "function_item"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "const_item"
+            }
+          ]
         }
       ]
     },

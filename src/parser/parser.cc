@@ -1797,6 +1797,7 @@ ast::ItemIdx Parser::parse_impl(bool is_pub) {
     return ast::ItemIdx::invalid();
   }
   std::vector<ast::ItemIdx> methods;
+  std::vector<ast::ItemIdx> consts;
   while (!check(lexer::TokenKind::RBrace) && !at_end()) {
     if (match(lexer::TokenKind::Semicolon)) {
       continue;
@@ -1826,19 +1827,38 @@ ast::ItemIdx Parser::parse_impl(bool is_pub) {
     // right to left reads `unsafe` while it is still at `pub`, and the
     // method arrives at `parse_fn` a token early.
     const bool is_pub = match(lexer::TokenKind::Pub);
+    const diag::Span unsafe_span = peek().span;
     const bool is_unsafe = match(lexer::TokenKind::Unsafe);
-    ast::ItemIdx method = parse_fn(is_pub, is_unsafe, false);
-    if (!method.is_valid()) {
+    const bool is_const = check(lexer::TokenKind::Const);
+    if (is_const && is_unsafe) {
+      const u32 index = bag_.emit<i18n::Key::ParserUnsafeOnlyOnFunctions>(
+          DiagCode::UnexpectedToken, unsafe_span);
+      (void)index;
+    }
+    ast::ItemIdx member =
+        is_const ? parse_const(is_pub) : parse_fn(is_pub, is_unsafe, false);
+    if (!member.is_valid()) {
       synchronize();
       continue;
     }
-    if (attributes.inline_kind != ast::InlineKind::None) {
-      ast::ItemFn fn = ast_.items[method].payload.get<ast::ItemFn>();
+    ast::ItemNode& node = ast_.items[member];
+    node.when_false = attributes.when_false;
+    if (attributes.inline_kind != ast::InlineKind::None &&
+        node.kind == ast::ItemKind::Fn) {
+      ast::ItemFn fn = node.payload.get<ast::ItemFn>();
       fn.inline_kind = attributes.inline_kind;
-      ast_.items[method].payload.set(fn);
+      node.payload.set(fn);
+    } else if (attributes.inline_kind != ast::InlineKind::None) {
+      const u32 index = bag_.emit<i18n::Key::ParserInlineNotOnFunction>(
+          DiagCode::InlineNotOnFunction, node.span);
+      (void)index;
     }
     if (!attributes.when_false) {
-      methods.push_back(method);
+      if (is_const) {
+        consts.push_back(member);
+      } else {
+        methods.push_back(member);
+      }
     }
   }
   if (!expect(lexer::TokenKind::RBrace, "`}`")) {
@@ -1853,6 +1873,7 @@ ast::ItemIdx Parser::parse_impl(bool is_pub) {
       .type = type,
       .spec = spec,
       .methods = ast::copy_to_arena(ast_.spans, methods),
+      .consts = ast::copy_to_arena(ast_.spans, consts),
   });
   return ast_.items.push_back(node);
 }

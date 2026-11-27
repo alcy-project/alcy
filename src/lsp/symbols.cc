@@ -158,6 +158,9 @@ text::JsonValue item_symbol(const Document& document,
       for (const ast::ItemIdx method : declaration.methods) {
         children.push(item_symbol(document, ast, method));
       }
+      for (const ast::ItemIdx constant : declaration.consts) {
+        children.push(item_symbol(document, ast, constant));
+      }
       return with_children(
           make_symbol(std::move(name), SymbolKind::Object,
                       range_of(document, item.span),

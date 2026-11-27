@@ -101,7 +101,7 @@ enum_item   = "enum" , IDENT , [ type_params ] , "{"
               (* An empty body is uninhabited and zero-sized. *)
 variant     = IDENT | IDENT , "(" , [ type , { "," , type } ] , ")" ;
 impl_item   = "impl" , [ type_params ] , type , [ "for" , type ] , "{"
-            , { [ "pub" ] , fn_item } , "}" ;
+            , { [ "pub" ] , ( fn_item | const_item ) } , "}" ;
               (* Without "for" the block is inherent. With it the first
                  type is the implemented spec as a path, optionally with
                  arguments, and the second is the target. *)

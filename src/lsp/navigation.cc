@@ -149,12 +149,19 @@ std::optional<diag::Span> declaration_name_at(
           }
         }
       } else if (item.kind == K::Impl) {
-        for (const ast::ItemIdx method :
-             item.payload.get<ast::ItemImpl>().methods) {
-          const diag::Span method_name =
-              ::ast::item_name_span(context.ast, context.ast.items[method]);
-          if (span_contains(method_name, offset)) {
-            return method_name;
+        const ast::ItemImpl& impl = item.payload.get<ast::ItemImpl>();
+        for (const ast::ItemIdx member : impl.methods) {
+          const diag::Span member_name =
+              ::ast::item_name_span(context.ast, context.ast.items[member]);
+          if (span_contains(member_name, offset)) {
+            return member_name;
+          }
+        }
+        for (const ast::ItemIdx member : impl.consts) {
+          const diag::Span member_name =
+              ::ast::item_name_span(context.ast, context.ast.items[member]);
+          if (span_contains(member_name, offset)) {
+            return member_name;
           }
         }
       } else if (item.kind == K::Spec) {

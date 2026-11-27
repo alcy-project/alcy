@@ -269,6 +269,62 @@ TEST_CASE("Parser builds public methods and mut self receivers") {
   CHECK(f.ast.items[impl.methods[1]].is_pub);
 }
 
+TEST_CASE("Parser builds public associated constants in an impl") {
+  Fixture f;
+  const ParseResult result = parse(
+      "struct S { x: i32 }\n"
+      "impl S {\n"
+      "  pub const MAX: i32 := 7i32\n"
+      "  fn get(self: &Self) -> i32 { ret 0 }\n"
+      "}\n",
+      f);
+  CHECK(result.ok);
+  if (!result.ok || result.items.size() != 2) {
+    return;
+  }
+  const ast::ItemImpl& impl = as_impl(result.items[1], f);
+  CHECK(impl.methods.size() == 1);
+  CHECK(impl.consts.size() == 1);
+  if (impl.consts.size() != 1) {
+    return;
+  }
+  CHECK(f.ast.items[impl.consts[0]].is_pub);
+  CHECK(as_const(impl.consts[0], f).name.name == "MAX");
+}
+
+TEST_CASE("A gate drops an associated constant before the impl sees it") {
+  Fixture f;
+  const ParseResult result = parse(
+      "struct S { x: i32 }\n"
+      "impl S {\n"
+      "  #[when(target.width == 64)] pub const WIDE: i32 := 7i32\n"
+      "  #[when(target.width == 32)] pub const NARROW: i32 := 3i32\n"
+      "}\n",
+      f);
+  CHECK(result.ok);
+  if (!result.ok || result.items.size() != 2) {
+    return;
+  }
+  const ast::ItemImpl& impl = as_impl(result.items[1], f);
+  CHECK(impl.consts.size() == 1);
+  if (impl.consts.size() != 1) {
+    return;
+  }
+  CHECK(as_const(impl.consts[0], f).name.name == "WIDE");
+}
+
+TEST_CASE("An unsafe associated constant is refused") {
+  Fixture f;
+  const ParseResult result = parse(
+      "struct S { x: i32 }\n"
+      "impl S {\n"
+      "  unsafe const MAX: i32 := 7i32\n"
+      "}\n",
+      f);
+  CHECK(!result.ok);
+  CHECK(has_message(f.bag, "`unsafe` applies to functions"));
+}
+
 TEST_CASE("Parser builds public struct fields") {
   Fixture f;
   const ParseResult result = parse("struct S { pub x: i32, y: i32 }\n", f);

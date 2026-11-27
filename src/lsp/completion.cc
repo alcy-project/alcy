@@ -848,9 +848,12 @@ std::unordered_map<ast::ItemIdx, ast::ItemIdx, ItemIdxHash> impl_index(
     if (item.kind != ast::ItemKind::Impl) {
       return;
     }
-    for (const ast::ItemIdx method :
-         item.payload.get<ast::ItemImpl>().methods) {
+    const ast::ItemImpl& impl = item.payload.get<ast::ItemImpl>();
+    for (const ast::ItemIdx method : impl.methods) {
       result.emplace(method, index);
+    }
+    for (const ast::ItemIdx constant : impl.consts) {
+      result.emplace(constant, index);
     }
   });
   return result;

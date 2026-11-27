@@ -46,6 +46,12 @@
   type (`str`, a slice, an array, a scalar) belongs to the staged
   suite, and only its packages implement for one — in a spec impl or
   an inherent block alike. See `grammar.md`.
+- An inherent block may declare associated constants as
+  `pub const NAME: T := expr`. They are compile-time values owned by the
+  target type and named `Type::NAME`; the initializer follows the same
+  rules as a module `const` (`comp.md`). The `pub` gate applies to each
+  const individually (`modules.md`). A const in a generic block is not
+  supported yet.
 - A spec may be sealed to its suite: the declaring package's manifest
   names it in `[spec] suite-only`, and only that package or a package
   of its suite may then implement it. A spec the list does not name
@@ -189,9 +195,9 @@ frames. Direct backends do no optimization and ignore the setting.
 
 - The `use`, `static`, and `const` forms take a gate, so a facade
   may re-export the arm that belongs to this target and drop the
-  others. `impl` blocks may gate as well, and so may the methods
-  inside them; a `spec` block may gate as one item, and its method
-  signatures cannot gate individually.
+  others. `impl` blocks may gate as well, and so may the methods and
+  associated constants inside them; a `spec` block may gate as one
+  item, and its method signatures cannot gate individually.
 
 - `testing` is read from the invocation, not the target: `alcy test`
   answers true, and every other command false. A test function's

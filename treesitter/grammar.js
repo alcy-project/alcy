@@ -325,14 +325,14 @@ module.exports = grammar({
       optional(seq(field('spec', $._type), 'for')),
       field('type', $._type),
       $._block_lbrace,
-      itemList($, $._impl_method),
+      itemList($, $._impl_member),
       '}',
     ),
 
-    // A gate leads a method the same way it leads a free item.
-    _impl_method: $ => seq(
+    // A gate leads an impl member the same way it leads a free item.
+    _impl_member: $ => seq(
       repeat($.attribute),
-      $.function_item,
+      choice($.function_item, $.const_item),
     ),
 
     // A path after `:` names a super-spec: every implementation of this

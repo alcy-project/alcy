@@ -1048,6 +1048,9 @@ struct ItemImpl {
   // through the same type grammar as the target.
   TypeIdx spec = TypeIdx::invalid();
   std::span<const ItemIdx> methods;
+  // Associated constants of the block, in declaration order. A gate that
+  // fails on this target removes the item before it reaches this list.
+  std::span<const ItemIdx> consts;
 };
 
 // One method signature of a spec declaration: a name with parameter
