@@ -60,6 +60,8 @@ struct LoadedInput {
         .files = FileTable{.names = files, .hashes = loaded.file_hashes},
         .addr_names = addr_names,
         .summary = summary,
+        .needs_drop = loaded.needs_drop,
+        .not_movable = loaded.not_movable,
         .prelude_functions = loaded.prelude_functions,
         .width = loaded.width,
         .compiler_version = loaded.compiler_version,

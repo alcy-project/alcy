@@ -86,6 +86,7 @@ TEST_CASE("A JSON parse reports where it stopped") {
   if (trailing.is_err()) {
     const JsonError error = std::move(trailing).unwrap_err();
     CHECK(error.offset == 2);
+    CHECK(error.message == "unexpected content after the JSON value");
   }
 
   base::Result<JsonValue, JsonError> unterminated = parse_json(R"("abc)");
@@ -93,6 +94,7 @@ TEST_CASE("A JSON parse reports where it stopped") {
   if (unterminated.is_err()) {
     const JsonError error = std::move(unterminated).unwrap_err();
     CHECK(error.offset == 4);
+    CHECK(error.message == "unterminated string");
   }
 
   CHECK(parse_json("{").is_err());
