@@ -359,9 +359,6 @@ EmittedBacktrace LlvmIrEmitter::emit() && noexcept {
   values_.resize_alloca_types(storage_->registers().size());
   values_.resize_slot_types(storage_->registers().size());
 
-  setup_immutables();
-  setup_external_functions();
-
   if (backtrace_) {
     // The slots the panic walker loads, filled once the runtime exists.
     // They have to exist before the runtime builds, because the walker
@@ -407,6 +404,37 @@ EmittedBacktrace LlvmIrEmitter::emit() && noexcept {
   const auto kept = [&](const ir::FunctionIdx function_idx) {
     return reachable.empty() || reachable[function_idx.idx];
   };
+
+  // The constants and the runtime declarations the kept bodies name.
+  // The checked storage carries every checked body's tables - the
+  // standard library's included - and a body the reachability walk
+  // dropped leaves its entries unreferenced, so the two setup passes
+  // materialize what the kept bodies name and nothing else.
+  std::vector<bool> referenced_immutables(storage_->immutables().size(), false);
+  std::vector<bool> referenced_externals(storage_->external_functions().size(),
+                                         false);
+  for (const ir::FunctionIdx function_idx : storage_->functions().idx_range()) {
+    if (parametric[function_idx.idx] || !kept(function_idx)) {
+      continue;
+    }
+    for (const ir::BlockIdx block_idx :
+         storage_->functions()[function_idx].blocks) {
+      const ir::Block& block = storage_->blocks()[block_idx];
+      for (const ir::InstructionIdx instr_idx : block.instrs) {
+        const ir::Instruction& instruction = storage_->instrs()[instr_idx];
+        for (const ir::OperandIdx operand_idx : instruction.operands) {
+          const ir::Operand& operand = storage_->operands()[operand_idx];
+          if (operand.is<ir::ImmutableIdx>()) {
+            referenced_immutables[operand.as_immutable().idx] = true;
+          } else if (operand.is<ir::ExternalFunctionIdx>()) {
+            referenced_externals[operand.as_external_function().idx] = true;
+          }
+        }
+      }
+    }
+  }
+  setup_immutables(referenced_immutables);
+  setup_external_functions(referenced_externals);
 
   // Declare every function before defining any body so forward
   // calls resolve regardless of declaration order.
@@ -1367,9 +1395,13 @@ llvm::Function* LlvmIrEmitter::resolve_operand_function(
   }
 }
 
-void LlvmIrEmitter::setup_immutables() {
+void LlvmIrEmitter::setup_immutables(const std::vector<bool>& referenced) {
   for (const ir::ImmutableIdx immutable_idx :
        storage_->immutables().idx_range()) {
+    if (immutable_idx.idx < referenced.size() &&
+        !referenced[immutable_idx.idx]) {
+      continue;
+    }
     const ir::Immutable& immutable = storage_->immutables()[immutable_idx];
 
     const ir::TypeTag tag = storage_->types()[immutable.type.idx].tag;
@@ -1419,10 +1451,14 @@ void LlvmIrEmitter::setup_immutables() {
   }
 }
 
-void LlvmIrEmitter::setup_external_functions() {
+void LlvmIrEmitter::setup_external_functions(
+    const std::vector<bool>& referenced) {
   for (ir::ExternalFunctionIdx function_idx(0);
        function_idx.idx < storage_->external_functions().size();
        ++function_idx) {
+    if (function_idx.idx < referenced.size() && !referenced[function_idx.idx]) {
+      continue;
+    }
     const ir::ExternalFunction& function =
         storage_->external_functions()[function_idx];
 

@@ -197,8 +197,8 @@ class LlvmIrEmitter {
   void emit_sited_call(ir::InstructionIdx instr_idx,
                        const ir::Instruction& instr);
 
-  void setup_immutables();
-  void setup_external_functions();
+  void setup_immutables(const std::vector<bool>& referenced);
+  void setup_external_functions(const std::vector<bool>& referenced);
 
   // True for a zero-parameter `main` whose return form maps to an
   // exit code: `()`, `i32`, or a two-variant enum whose first variant
