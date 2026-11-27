@@ -574,13 +574,18 @@ std::vector<u8> serialize_package_ir(PipelineContext& ctx,
              : std::span<const ir::SummaryEntry>();
   // Each row with code names the symbol a dependent links against.
   std::vector<ir::SummaryEntry> rows(summary.begin(), summary.end());
+  std::vector<ir::FunctionIdx> parametric(
+      package.storage->parametric_functions().begin(),
+      package.storage->parametric_functions().end());
+  std::sort(parametric.begin(), parametric.end());
   for (ir::SummaryEntry& row : rows) {
     if (!row.function.is_valid()) {
       continue;
     }
     // A parametric body has no ABI to link by; a dependent clones it
     // from the carried storage instead.
-    if (package.storage->is_parametric(row.function)) {
+    if (std::binary_search(parametric.begin(), parametric.end(),
+                           row.function)) {
       continue;
     }
     const std::string symbol = linkable_symbol(ctx, package, row);
@@ -958,6 +963,7 @@ std::optional<FrontCache> front_cache_location(PipelineContext& ctx,
       .is_lib = is_lib,
       .emit_entry = emit_entry,
       .testing = ctx.testing,
+      .freestanding = ctx.freestanding,
       .summary_digests = ctx.summary_digests,
   });
   return FrontCache{std::string(out_dir.join(".cache").as_view()), key,

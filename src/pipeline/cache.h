@@ -63,6 +63,9 @@ struct CacheInputs {
   // shows the difference through the run's driver, but the mode itself is
   // what steers lowering and belongs in the key on its own.
   bool testing = false;
+  // A freestanding build parses and lowers a different tree: the entry is
+  // _start and no C runtime is linked.
+  bool freestanding = false;
   // The dependency summaries the run resolved against, one digest per
   // sidecar read. A summary steers lowering the way a source does.
   std::span<const base::Digest128> summary_digests;

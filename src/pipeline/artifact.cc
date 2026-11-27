@@ -505,6 +505,7 @@ base::Result<PackageSources, diag::Reported> collect_package_sources(
         .is_lib = false,
         .emit_entry = mode == EmitMode::Executable,
         .testing = ctx.testing,
+        .freestanding = ctx.freestanding,
         .summary_digests = ctx.summary_digests,
     });
     const path::Path cache_dir =

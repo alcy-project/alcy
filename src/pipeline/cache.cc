@@ -77,7 +77,8 @@ base::Digest128 cache_key(const CacheInputs& inputs) {
   canonical.bytes(inputs.target_name);
   canonical.u8(inputs.is_lib ? 1 : 0)
       .u8(inputs.emit_entry ? 1 : 0)
-      .u8(inputs.testing ? 1 : 0);
+      .u8(inputs.testing ? 1 : 0)
+      .u8(inputs.freestanding ? 1 : 0);
   for (const std::array<u8, 16>& digest : summaries) {
     canonical.bytes(std::string_view(
         reinterpret_cast<const char*>(digest.data()), digest.size()));
