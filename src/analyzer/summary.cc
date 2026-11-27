@@ -15,6 +15,7 @@
 
 #include "analyzer/resolve.h"
 #include "ast/ast.h"
+#include "comp/comp_value.h"
 #include "diag/span.h"
 #include "fpag/str/string_pool_id.h"
 #include "ir/common.h"
@@ -778,6 +779,58 @@ bool spell_declaration(const SpellContext& ctx,
   return item_out.is_valid();
 }
 
+// Spells a summary's associated const as an item whose initializer is the
+// literal the value already holds. The declared type comes from the
+// immutable, so an unsuffixed literal takes that type at the use site.
+bool spell_const(const SpellContext& ctx,
+                 std::string_view name,
+                 const ir::Immutable& value,
+                 ast::ItemIdx& item_out) {
+  const ast::TypeIdx type = spell_type(ctx, value.type);
+  if (!type.is_valid()) {
+    return false;
+  }
+  const ir::TypeTag tag = ctx.storage.types()[value.type.idx].tag;
+  const u64 bits = value.as_u64_integer(tag);
+  const bool boolean = tag == ir::TypeTag::I1;
+  const bool negative = comp::is_signed(tag) && (bits >> 63) != 0;
+  const std::string spelling =
+      boolean    ? (bits != 0 ? std::string("true") : std::string("false"))
+      : negative ? std::to_string(u64{0} - bits)
+                 : std::to_string(bits);
+  const std::optional<str::StringPoolId> interned =
+      ctx.strings.intern_copied(spelling);
+  if (!interned.has_value()) {
+    return false;
+  }
+  ast::Literal literal{
+      .kind = boolean ? ast::LiteralKind::Bool : ast::LiteralKind::Integer,
+      .span = {},
+      .spelling = ctx.strings.get(*interned),
+      .is_negative = false};
+  const ast::LiteralIdx literal_index = ctx.ast.literals.push_back(literal);
+  ast::ExprNode expression;
+  expression.kind = ast::ExprKind::Literal;
+  expression.span = {};
+  expression.payload.set(ast::ExprLiteral{.value = literal_index});
+  ast::ExprIdx init = ctx.ast.exprs.push_back(expression);
+  if (negative) {
+    ast::ExprNode negation;
+    negation.kind = ast::ExprKind::Unary;
+    negation.span = {};
+    negation.payload.set(
+        ast::ExprUnary{.op = ast::UnaryOp::Neg, .inner = init});
+    init = ctx.ast.exprs.push_back(negation);
+  }
+  ast::ItemNode node;
+  node.kind = ast::ItemKind::Const;
+  node.is_pub = true;
+  node.payload.set(ast::ItemConst{
+      .name = ast::Ident{name, diag::Span{}}, .type = type, .init = init});
+  item_out = ctx.ast.items.push_back(node);
+  return item_out.is_valid();
+}
+
 }  // namespace
 
 std::string summary_module_name(std::string_view dotted) {
@@ -845,7 +898,9 @@ SummarySurface spell_summary_surface(const ir::LoadedIr& summary,
   // declaration is in, whatever module the method's row names.
   struct ImplGroup {
     std::string_view path;
+    ast::TypeIdx target = ast::TypeIdx::invalid();
     std::vector<ast::ItemIdx> methods;
+    std::vector<ast::ItemIdx> consts;
     std::vector<SummarySymbol> symbols;
   };
   std::unordered_map<u32, ImplGroup> impls;
@@ -871,6 +926,30 @@ SummarySurface spell_summary_surface(const ir::LoadedIr& summary,
     }
     const std::string_view name = named(row.name, "");
     const std::string_view path = named(row.path, "");
+    if (row.kind == ir::SummaryKind::Const) {
+      // The row's function field names an immutable, not a lowered body.
+      if (!row.owner.is_valid() ||
+          row.function.idx >= context.storage.immutables().size()) {
+        continue;
+      }
+      ast::ItemIdx constant = ast::ItemIdx::invalid();
+      if (!spell_const(context, name,
+                       context.storage.immutables()[row.function.idx],
+                       constant)) {
+        continue;
+      }
+      ImplGroup& group = impls[row.owner.idx];
+      if (!group.target.is_valid()) {
+        group.path = path;
+        group.target = spell_type(context, ir::TypeIdx(row.owner.idx));
+        if (!group.target.is_valid()) {
+          continue;
+        }
+        impl_order.push_back(row.owner.idx);
+      }
+      group.consts.push_back(constant);
+      continue;
+    }
     // A row without a symbol is one the writer could not name; the
     // source name is the closest a surface can spell. A carried body
     // keeps none: the dependent clones it from the storage beside the
@@ -927,31 +1006,37 @@ SummarySurface spell_summary_surface(const ir::LoadedIr& summary,
   }
   for (const u32 owner : impl_order) {
     const ImplGroup& group = impls[owner];
-    const auto site = context.nominals.find(owner);
-    if (site == context.nominals.end()) {
-      continue;
-    }
-    const std::optional<ast::TypeIdx> target =
-        spell_nominal_path(context, site->second, ir::TypeIdx(owner));
-    if (!target.has_value()) {
-      continue;
-    }
+    ast::TypeIdx target = group.target;
     std::vector<ast::GenericParam> declared;
-    const ir::TypeNode& owner_node = summary.storage->types()[owner];
-    const ir::TypeIdxRange owner_params =
-        owner_node.tag == ir::TypeTag::Struct
-            ? summary.storage->struct_types()[owner_node.as_struct()].params
-            : summary.storage->enum_types()[owner_node.as_enum()].params;
-    if (!spell_declared_params(context, owner_params, declared)) {
-      continue;
+    if (!target.is_valid()) {
+      const auto site = context.nominals.find(owner);
+      if (site == context.nominals.end()) {
+        continue;
+      }
+      const std::optional<ast::TypeIdx> spelled =
+          spell_nominal_path(context, site->second, ir::TypeIdx(owner));
+      if (!spelled.has_value()) {
+        continue;
+      }
+      target = *spelled;
+      const ir::TypeNode& owner_node = summary.storage->types()[owner];
+      const ir::TypeIdxRange owner_params =
+          owner_node.tag == ir::TypeTag::Struct
+              ? summary.storage->struct_types()[owner_node.as_struct()].params
+              : summary.storage->enum_types()[owner_node.as_enum()].params;
+      if (!spell_declared_params(context, owner_params, declared)) {
+        continue;
+      }
     }
     ast::ItemImpl impl;
     impl.params = ast::copy_to_arena(ast.spans, declared);
-    impl.type = *target;
+    impl.type = target;
     impl.methods = ast::copy_to_arena(ast.spans, group.methods);
+    impl.consts = ast::copy_to_arena(ast.spans, group.consts);
     ast::ItemNode node;
     node.kind = ast::ItemKind::Impl;
     node.is_pub = true;
+    node.from_summary = true;
     node.payload.set(impl);
     const ast::ItemIdx item = ast.items.push_back(node);
     if (!item.is_valid()) {

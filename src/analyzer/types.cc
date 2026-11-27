@@ -2173,7 +2173,7 @@ void Checker::process_module(u32 module) {
         } else if (self_node.kind == ast::TypeKind::Str) {
           // `impl str`: the string view is a builtin, and the staged
           // suite owns the methods on it.
-          if (!in_staged_suite(module)) {
+          if (!in_staged_suite(module) && !ast.items[item].from_summary) {
             const u32 index =
                 bag.emit<i18n::Key::AnalyzerBuiltinImplOutsideItsSuite>(
                     DiagCode::ImplOutsideItsHome, self_node.span, "str");
@@ -2187,7 +2187,7 @@ void Checker::process_module(u32 module) {
           // one, the same way it owns `impl str`.
           self_type = resolve_type(
               module, node.payload.get<ast::ItemImpl>().type, nullptr);
-          if (!in_staged_suite(module)) {
+          if (!in_staged_suite(module) && !ast.items[item].from_summary) {
             const std::string display =
                 is_error(self_type)
                     ? std::string("that scalar")
@@ -2203,7 +2203,7 @@ void Checker::process_module(u32 module) {
                    self_node.kind == ast::TypeKind::Array) {
           // A slice or array is a builtin too: the staged suite owns
           // the methods on one.
-          if (!in_staged_suite(module)) {
+          if (!in_staged_suite(module) && !ast.items[item].from_summary) {
             const u32 index =
                 bag.emit<i18n::Key::AnalyzerBuiltinImplOutsideItsSuite>(
                     DiagCode::ImplOutsideItsHome, self_node.span, "[T]");
@@ -3799,9 +3799,7 @@ const CheckedModule::AssociatedConstInfo* Checker::find_associated_const_path(
   if (constant == nullptr) {
     return nullptr;
   }
-  const auto& table = modules[constant->module].associated_consts;
-  const u32 index = static_cast<u32>(constant - table.data());
-  modules[module].record_associated_const_use(path, index);
+  modules[module].record_associated_const_use(path, constant);
   return constant;
 }
 

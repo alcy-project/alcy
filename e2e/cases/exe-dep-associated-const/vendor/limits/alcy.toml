@@ -1,0 +1,12 @@
+[package]
+name = "acme-limits"
+version = "0.1.0"
+license = ""
+
+[modules]
+include = ["limits"]
+export = ["limits"]
+
+[[bin]]
+name = "acme-limits"
+path = "limits.al"

@@ -3763,6 +3763,44 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
   std::vector<ir::SummaryEntry> summary =
       collect_summary(lowerer.pkg, ast, lowerer.fns, lowerer.builder.state(),
                       strings, summary_fields);
+  // A public associated const crosses the package boundary as a typed
+  // immutable. Its initializer was checked in the declaring module, so
+  // evaluate it there and let the summary row name the value by index;
+  // the row's `function` field is an immutable index for this kind.
+  for (u32 mod = 0; mod < lowerer.pkg.modules.size(); ++mod) {
+    if (!is_own_module(lowerer.pkg.tree, mod)) {
+      continue;
+    }
+    for (const analyzer::CheckedModule::AssociatedConstInfo& info :
+         lowerer.pkg.modules[mod].associated_consts) {
+      if (!info.is_pub || info.module != mod) {
+        continue;
+      }
+      auto evaluated = lowerer.comp_.evaluate_item(info.module, info.init,
+                                                   analyzer::NO_INST);
+      if (evaluated.is_err()) {
+        continue;
+      }
+      comp::CompVal value = std::move(evaluated).unwrap();
+      if (value.value.tag != comp::CompValue::Tag::Int &&
+          value.value.tag != comp::CompValue::Tag::Bool) {
+        continue;
+      }
+      const u64 bits = value.value.tag == comp::CompValue::Tag::Bool
+                           ? (value.value.bool_value ? 1u : 0u)
+                           : value.value.int_value;
+      const ir::Immutable imm =
+          immutable_from_u64(lowerer.tag_of(info.type), info.type, bits);
+      const ir::ImmutableIdx index = lowerer.builder.immutable(imm);
+      summary.push_back(ir::SummaryEntry{
+          .function = ir::FunctionIdx(index.idx),
+          .name = strings.intern(info.name),
+          .path = strings.intern(lowerer.pkg.tree.modules[mod]->path),
+          .owner = info.owner,
+          .kind = ir::SummaryKind::Const,
+      });
+    }
+  }
   // Side tables move out before the builder, which finish() consumes. The
   // spans are one per instruction, so they are renumbered with the table.
   lowerer.compact_instrs();

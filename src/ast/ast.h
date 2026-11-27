@@ -1104,6 +1104,10 @@ struct ItemNode {
   // the item is kept nowhere, so the pipeline drops it before resolution
   // sees it. The parser sets the flag; the driver reads it.
   bool when_false = false;
+  // The item was spelled from a dependency's summary rather than from
+  // source. A builtin's inherent impl is legal in the suite that owns
+  // it, which a summary-derived block already is.
+  bool from_summary = false;
   // The `#[repr(C)]` marker on a struct: the struct's shape is the
   // platform's C layout, fixed by that declaration whatever the
   // default was to spell and whatever it may become. Only meaningful

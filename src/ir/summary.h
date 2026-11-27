@@ -30,6 +30,10 @@ enum class SummaryKind : u8 {
   Method = 3,
   Struct = 4,
   Enum = 5,
+  // A compile-time value owned by a type. `function` carries the
+  // IMMUTABLES row that holds its value; `type` stays invalid. The value
+  // needs no lowered code, so no function index is consumed.
+  Const = 6,
 };
 
 // One row of a package's public surface: the source name, the

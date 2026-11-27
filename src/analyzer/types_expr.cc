@@ -1063,11 +1063,8 @@ ir::TypeIdx Checker::check_path_expr(u32 module,
     case PathValue::Kind::AssociatedConst:
     case PathValue::Kind::UnitVariant: {
       if (resolved.kind == PathValue::Kind::AssociatedConst) {
-        const CheckedModule::AssociatedConstInfo* constant =
-            resolved.associated_const;
-        const auto& table = modules[constant->module].associated_consts;
-        const u32 index = static_cast<u32>(constant - table.data());
-        modules[module].record_associated_const_use(path, index);
+        modules[module].record_associated_const_use(path,
+                                                    resolved.associated_const);
       }
       if (resolved.kind == PathValue::Kind::Static && comp_eval_depth > 0 &&
           !is_const_item(module, path)) {

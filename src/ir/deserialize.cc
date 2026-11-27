@@ -1130,10 +1130,15 @@ bool read_summary(Parsed& parsed, std::span<const u8> payload) {
       return false;
     }
     const SummaryKind summary_kind = static_cast<SummaryKind>(kind);
-    if (kind > static_cast<u8>(SummaryKind::Enum)) {
+    if (kind > static_cast<u8>(SummaryKind::Const)) {
       return false;
     }
-    if (function != NONE && function >= parsed.state.functions.size()) {
+    // A const row's function field holds an IMMUTABLES index, not a
+    // function index: the value needs no lowered code.
+    const bool is_const = summary_kind == SummaryKind::Const;
+    const usize index_limit = is_const ? parsed.state.immutables.size()
+                                       : parsed.state.functions.size();
+    if (function != NONE && function >= index_limit) {
       return false;
     }
     if (type != NONE && type >= parsed.state.types.size()) {

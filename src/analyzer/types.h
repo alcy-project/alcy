@@ -188,25 +188,26 @@ struct CheckedModule {
   // length carry.
   struct AssociatedConstUse {
     ast::PathIdx path = ast::PathIdx::invalid();
-    u32 index = base::INVALID_IDX;
+    const AssociatedConstInfo* declaration = nullptr;
   };
   std::vector<AssociatedConstUse> associated_const_uses;
-  std::unordered_map<u32, u32> associated_const_use_by_path;
+  // The declaration may live in another module, so the use keeps the
+  // declaration rather than an index into the using module's table.
+  std::unordered_map<u32, const AssociatedConstInfo*>
+      associated_const_use_by_path;
   [[nodiscard]] const AssociatedConstInfo* associated_const_of(
       ast::PathIdx path) const {
     const auto found = associated_const_use_by_path.find(path.idx);
-    if (found == associated_const_use_by_path.end() ||
-        found->second >= associated_consts.size()) {
-      return nullptr;
-    }
-    return &associated_consts[found->second];
+    return found == associated_const_use_by_path.end() ? nullptr
+                                                       : found->second;
   }
-  void record_associated_const_use(ast::PathIdx path, u32 index) {
+  void record_associated_const_use(ast::PathIdx path,
+                                   const AssociatedConstInfo* declaration) {
     if (associated_const_use_by_path.contains(path.idx)) {
       return;
     }
-    associated_const_use_by_path.emplace(path.idx, index);
-    associated_const_uses.push_back({path, index});
+    associated_const_use_by_path.emplace(path.idx, declaration);
+    associated_const_uses.push_back({path, declaration});
   }
   // Lowering side tables: every checked expression records its type,
   // and every checked call records its callee, so lowering never

@@ -23,7 +23,8 @@ inline constexpr u8 MAGIC[4] = {'A', 'L', 'I', 'R'};
 inline constexpr u16 MAJOR = 9;
 // Minor 1 adds the specialization and synthetic function lists.
 // Minor 2 adds the per-type trait tables.
-inline constexpr u16 MINOR = 2;
+// Minor 3 adds associated const rows to the summary.
+inline constexpr u16 MINOR = 3;
 // Bit 0: the payload is little-endian. Always set; a reader rejects a
 // file that clears it.
 inline constexpr u32 FLAG_LITTLE_ENDIAN = 1;
