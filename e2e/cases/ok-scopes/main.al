@@ -26,12 +26,7 @@ impl Scopes {
     if self.frames.is_empty() {
       ret false
     }
-    _ :=
-      self
-      .frames
-      .last_mut()
-      .or_panic("expected a value")
-      .insert(String::from(name), kind)
+    _ := self.frames.last_mut().or_panic("expected a value").insert(String::from(name), kind)
     ret true
   }
 

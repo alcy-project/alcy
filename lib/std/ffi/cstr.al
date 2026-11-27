@@ -63,9 +63,7 @@ impl CStr {
   }
 
   #[test] fn length_stops_at_the_terminator() {
-    owned :=
-      CString::from_str("a string long enough to notice")
-      .or_panic("a plain string")
+    owned := CString::from_str("a string long enough to notice").or_panic("a plain string")
     view := CStr::from_ptr(owned.as_ptr())
     assert(view.len() == owned.len(), "the view counts as far as the terminator")
   }

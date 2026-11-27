@@ -1010,10 +1010,7 @@ impl Iterator < str > for SplitIter {
   }
 
   #[test] fn split_once_of_an_empty_delimiter_splits_at_the_start() {
-    (empty, rest) :=
-      "key"
-      .split_once("")
-      .or_panic("an empty delimiter is at the start")
+    (empty, rest) := "key".split_once("").or_panic("an empty delimiter is at the start")
     assert(empty == "", "nothing precedes a delimiter at the start")
     assert(rest == "key", "the whole view follows it")
   }

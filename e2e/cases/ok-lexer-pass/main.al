@@ -54,9 +54,7 @@ fn lex(src: str) -> Vec<Token> {
 }
 
 fn text_of(src: str, t: &Token) -> str {
-  ret src
-    .byte_slice(t.span.start, t.span.end)
-    .or_panic("spans lie on scalar boundaries")
+  ret src.byte_slice(t.span.start, t.span.end).or_panic("spans lie on scalar boundaries")
 }
 
 fn main() -> i32 {
