@@ -5,7 +5,6 @@ comp fn count<T>(args: T..) -> usize {
 }
 
 const EMPTY: usize := count::<i32>()
-
 const THREE: usize := count(1, 2, 3)
 
 comp fn mixed(args: ..) -> usize {

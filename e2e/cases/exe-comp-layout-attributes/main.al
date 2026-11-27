@@ -19,9 +19,7 @@ struct Offset {
 }
 
 const W: usize := size_of::<Wide>()
-
 const A: usize := align_of::<Wide>()
-
 const F: usize := size_of::<Flag>()
 
 comp fn last(comp s: Offset) -> u8 {

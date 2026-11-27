@@ -8,9 +8,7 @@ struct Pair {
 }
 
 const MINIMUM: i8 := -128
-
 const FRACTION: f32 := -1.5
-
 const ZERO: f64 := -0.0
 
 fn take(value: i8) -> i8 {

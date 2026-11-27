@@ -85,6 +85,7 @@ class Printer {
                                     bool& had_comma,
                                     bool& trailing) const;
   static bool chunk_is_use(const Chunk& chunk);
+  static bool chunk_is_const(const Chunk& chunk);
   static bool chunk_is_attribute(const Chunk& chunk);
 
   std::string_view source_;

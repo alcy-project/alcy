@@ -121,7 +121,10 @@ what implements it lives in `src/`.
   and both lean on the compiler's lexer alone. `alcy fmt` reaches the
   formatter from the command line,
   and `tools/check_fmt.py` asks its properties of every source in the
-  tree. `src/linter/` is the static analyzer, `alcy lint`,
+  tree. Its blank-line rule keeps consecutive `use` declarations and
+  consecutive `const`/`static` declarations together, while separating
+  every other module-level item with one blank line; an attribute stays
+  glued to the item it marks. `src/linter/` is the static analyzer, `alcy lint`,
   over the frontend: no compiler target depends on it, the cli does, and
   its rules, configuration, and entry points are documented in
   `src/linter/README.md`. `src/lsp/` is the language

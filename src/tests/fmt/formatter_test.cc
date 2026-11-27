@@ -546,4 +546,22 @@ TEST_CASE("Every configuration in a range keeps the output idempotent") {
   }
 }
 
+TEST_CASE("Consecutive module-level constants group like imports") {
+  const std::string source =
+      "const A: usize := 1\n"
+      "pub const B: usize := 2\n"
+      "static C: usize := 3\n"
+      "fn f() -> usize { ret A }\n";
+  const std::string expected =
+      "const A: usize := 1\n"
+      "pub const B: usize := 2\n"
+      "static C: usize := 3\n"
+      "\n"
+      "fn f() -> usize {\n"
+      "  ret A\n"
+      "}\n";
+  CHECK(once(source) == expected);
+  CHECK(idempotent_default(source));
+}
+
 }  // namespace alcy_fmt

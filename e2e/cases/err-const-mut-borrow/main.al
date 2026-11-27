@@ -7,9 +7,7 @@ struct C {
 }
 
 const K: C := C { n: 1 }
-
 const A: [i32; 2] := [1, 2]
-
 const N: i32 := 7
 
 fn main() -> i32 {

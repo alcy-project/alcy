@@ -13,9 +13,7 @@ impl Point {
 }
 
 const GREETING: str := " hello "
-
 const ORIGIN: Point := Point { x: 3, y: 4 }
-
 const SIZE: i32 := 3
 
 fn main() -> i32 {

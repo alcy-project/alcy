@@ -223,6 +223,33 @@ bool Printer::chunk_is_use(const Chunk& chunk) {
   return false;
 }
 
+// Whether a chunk is a module-level `const`, `pub const`, or `static`
+// declaration: the small value declarations that group like imports.
+bool Printer::chunk_is_const(const Chunk& chunk) {
+  for (usize i = 0; i < chunk.nodes.size(); ++i) {
+    const cst::Node& node = *chunk.nodes[i];
+    if (node.kind != cst::NodeKind::Token) {
+      continue;
+    }
+    if (node.token == lexer::TokenKind::Const ||
+        node.token == lexer::TokenKind::Static) {
+      return true;
+    }
+    if (node.token == lexer::TokenKind::Pub) {
+      for (usize j = i + 1; j < chunk.nodes.size(); ++j) {
+        if (chunk.nodes[j]->kind == cst::NodeKind::Token &&
+            (chunk.nodes[j]->token == lexer::TokenKind::Const ||
+             chunk.nodes[j]->token == lexer::TokenKind::Static)) {
+          return true;
+        }
+      }
+      return false;
+    }
+    return false;
+  }
+  return false;
+}
+
 // Where the chunk's run of trailing comments that end a line starts.
 // A block comment does not end a line, so it stays part of the code.
 usize Printer::trailing_eol_start(const Chunk& chunk) {
@@ -418,6 +445,10 @@ Doc Printer::print_body_lines(const std::vector<Chunk>& chunks,
         }
         if (top_level && chunk_is_use(chunks[k - 1]) &&
             chunk_is_use(chunks[k])) {
+          blank = false;
+        }
+        if (top_level && chunk_is_const(chunks[k - 1]) &&
+            chunk_is_const(chunks[k])) {
           blank = false;
         }
       } else {
