@@ -339,7 +339,9 @@ def main() -> int:
         help="modules to list in the report; 0 means every module (default: 8)",
     )
     parser.add_argument("--verbose", action="store_true")
+    timing.add_argument(parser)
     args = parser.parse_args()
+    timing.configure(args.timings)
 
     if args.build_only:
         if build() != 0:
@@ -366,6 +368,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    from utils.timing import run_with_timings
-
-    sys.exit(run_with_timings(main))
+    sys.exit(main())

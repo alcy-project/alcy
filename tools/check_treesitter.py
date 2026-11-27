@@ -291,7 +291,9 @@ def main() -> int:
         default="build",
         help="Subdirectory inside out/ holding the alcy binary (default: build)",
     )
+    timing.add_argument(parser)
     args = parser.parse_args()
+    timing.configure(args.timings)
 
     cli = "tree-sitter"
     if shutil.which(cli) is None:
@@ -335,6 +337,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    from utils.timing import run_with_timings
-
-    sys.exit(run_with_timings(main))
+    sys.exit(main())

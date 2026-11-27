@@ -59,7 +59,9 @@ def main() -> int:
     )
     parser.add_argument("--jobs", type=int, default=0, help="parallel cases")
     log.add_verbose(parser)
+    timing.add_argument(parser)
     args = parser.parse_args()
+    timing.configure(args.timings)
 
     roots = [project_root_dir / root for root in args.cases_root] or [
         project_root_dir / "e2e" / "cases"
@@ -127,6 +129,4 @@ def shutil_which(name: str) -> bool:
 
 
 if __name__ == "__main__":
-    from utils.timing import run_with_timings
-
-    sys.exit(run_with_timings(main))
+    sys.exit(main())

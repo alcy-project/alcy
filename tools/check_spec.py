@@ -17,6 +17,7 @@ What is rejected is an implementation *file* and an implementation
 specification behind a rule, and the deferred list points at the plan for the rest.
 """
 
+import argparse
 import re
 import sys
 
@@ -46,6 +47,11 @@ PATTERNS = {
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    timing.add_argument(parser)
+    args = parser.parse_args()
+    timing.configure(args.timings)
+
     findings = 0
     for path in sorted(SPEC_DIR.rglob("*")):
         if not path.is_file() or path.suffix not in {".md", ".ebnf"}:
@@ -73,6 +79,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    from utils.timing import run_with_timings
-
-    sys.exit(run_with_timings(main))
+    sys.exit(main())

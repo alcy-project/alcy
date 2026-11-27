@@ -137,7 +137,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("message", nargs="?", help="path to the commit message file")
     parser.add_argument("--self-test", action="store_true")
+    timing.add_argument(parser)
     args = parser.parse_args()
+    timing.configure(args.timings)
 
     if args.self_test:
         code = self_test()
@@ -159,6 +161,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    from utils.timing import run_with_timings
-
-    sys.exit(run_with_timings(main))
+    sys.exit(main())

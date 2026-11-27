@@ -839,7 +839,9 @@ def main() -> int:
         help="How far two runs of a case may differ (default %(default)s)",
     )
 
+    timing.add_argument(parser)
     args = parser.parse_args()
+    timing.configure(args.timings)
     timing.mark("setup")
     if args.command == "compare":
         code = compare(Path(args.before), Path(args.after))
@@ -858,6 +860,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    from utils.timing import run_with_timings
-
-    sys.exit(run_with_timings(main))
+    sys.exit(main())

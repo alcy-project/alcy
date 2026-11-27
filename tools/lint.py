@@ -510,7 +510,9 @@ def main():
         "split it; the whole-tree checks ride with 1/N",
     )
 
+    timing.add_argument(parser)
     args = parser.parse_args()
+    timing.configure(args.timings)
     if args.no_whole_tree and args.changed is None:
         parser.error("--no-whole-tree needs --changed")
 
@@ -536,10 +538,8 @@ def main():
 
 
 if __name__ == "__main__":
-    from utils.timing import run_with_timings
-
     try:
-        sys.exit(run_with_timings(main))
+        sys.exit(main())
     except KeyboardInterrupt:
         print("\nInterrupted by user. Exiting immediately...", file=sys.stderr)
         os._exit(130)

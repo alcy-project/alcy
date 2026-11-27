@@ -179,7 +179,9 @@ def main():
         help="Packages to run concurrently (default: the core count)",
     )
     log.add_verbose(parser)
+    timing.add_argument(parser)
     args = parser.parse_args()
+    timing.configure(args.timings)
 
     alcy = alcy_binary(args.build_subdir)
     if not alcy.is_file():
@@ -233,6 +235,4 @@ def run_packages(alcy, selected, jobs: int):
 
 
 if __name__ == "__main__":
-    from utils.timing import run_with_timings
-
-    sys.exit(run_with_timings(main))
+    sys.exit(main())

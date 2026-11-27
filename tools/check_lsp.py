@@ -109,7 +109,9 @@ def main() -> int:
         default="build",
         help="Subdirectory inside out/ holding the alcy binary",
     )
+    timing.add_argument(parser)
     args = parser.parse_args()
+    timing.configure(args.timings)
     global BUILD_SUBDIR
     BUILD_SUBDIR = args.build_subdir
 
@@ -1167,7 +1169,6 @@ def tcp_session(alcy: Path) -> int:
 
 
 if __name__ == "__main__":
-    from utils.timing import run_with_timings
 
     def run() -> int:
         code = main()
@@ -1182,4 +1183,4 @@ if __name__ == "__main__":
         timing.mark("tcp")
         return code
 
-    sys.exit(run_with_timings(run))
+    sys.exit(run())

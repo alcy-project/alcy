@@ -35,7 +35,9 @@ def main():
         default="playground",
         help="Subdirectory inside out/ holding the playground build",
     )
+    timing.add_argument(parser)
     args = parser.parse_args()
+    timing.configure(args.timings)
 
     launcher = project_root_dir / "out" / args.build_subdir / "alcy_playground.js"
     if not launcher.is_file():
@@ -71,6 +73,4 @@ def main():
 
 
 if __name__ == "__main__":
-    from utils.timing import run_with_timings
-
-    sys.exit(run_with_timings(main))
+    sys.exit(main())

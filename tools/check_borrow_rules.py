@@ -1306,7 +1306,9 @@ def main():
         action="store_true",
         help="List every case, not only the deviations",
     )
+    timing.add_argument(parser)
     args = parser.parse_args()
+    timing.configure(args.timings)
 
     alcy = project_root_dir / "out" / args.build_subdir / "alcy"
     if not alcy.is_file():
@@ -1369,6 +1371,4 @@ def main():
 
 
 if __name__ == "__main__":
-    from utils.timing import run_with_timings
-
-    sys.exit(run_with_timings(main))
+    sys.exit(main())

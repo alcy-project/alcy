@@ -5,30 +5,37 @@
 
 """Elapsed-time reporting shared by the check tools.
 
-A tool that wants a --timings flag wraps its entry point; the flag is
-stripped before argparse sees it, so no parser or return path changes.
-`mark()` names the time since the previous mark (or the start), and the
-total is printed at exit. Both go to stderr, leaving the check's report
-on stdout.
+A tool adds the flag with `timing.add_argument(parser)` and calls
+`timing.configure(args.timings)` after parsing. `mark()` names the time
+since the previous mark (or the start), and the total is printed at exit.
+Both go to stderr, leaving the check's report on stdout.
 """
 
+import argparse
 import atexit
 import sys
 import time
-from collections.abc import Callable
 
 _enabled = False
 _started = 0.0
 _last = 0.0
 
 
-def start() -> None:
-    """Begins timing when --timings was given; otherwise a no-op."""
+def add_argument(parser: argparse.ArgumentParser) -> None:
+    """Registers --timings so it appears in the tool's own help."""
+    parser.add_argument(
+        "--timings",
+        action="store_true",
+        help="report elapsed time for each phase to stderr",
+    )
+
+
+def configure(enabled: bool) -> None:
+    """Begins timing when the caller's --timings flag was given."""
     global _enabled, _started, _last
-    _enabled = "--timings" in sys.argv
-    if not _enabled:
+    _enabled = enabled
+    if not enabled:
         return
-    sys.argv.remove("--timings")
     _started = _last = time.perf_counter()
     atexit.register(_report_total)
 
@@ -45,12 +52,6 @@ def mark(label: str) -> None:
 
 def _report_total() -> None:
     print(
-        f"{sys.argv[0]}: {time.perf_counter() - _started:7.3f}s  total",
+        f"total: {time.perf_counter() - _started:7.3f}s",
         file=sys.stderr,
     )
-
-
-def run_with_timings(entry: Callable[[], int]) -> int:
-    """Runs `entry`, reporting phase and total times when --timings was given."""
-    start()
-    return entry()

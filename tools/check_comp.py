@@ -90,7 +90,9 @@ def main() -> int:
         ),
     )
     log.add_verbose(parser)
+    timing.add_argument(parser)
     args = parser.parse_args()
+    timing.configure(args.timings)
 
     out = project_root_dir / "out" / args.build_subdir
     tools = {}
@@ -161,6 +163,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    from utils.timing import run_with_timings
-
-    sys.exit(run_with_timings(main))
+    sys.exit(main())

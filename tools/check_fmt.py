@@ -126,7 +126,9 @@ def main() -> int:
         action="store_true",
         help="Write the canonical layout to the sources that would change",
     )
+    timing.add_argument(parser)
     args = parser.parse_args()
+    timing.configure(args.timings)
 
     alcy = alcy_binary(args.build_subdir)
     if not alcy.is_file():
@@ -234,6 +236,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    from utils.timing import run_with_timings
-
-    sys.exit(run_with_timings(main))
+    sys.exit(main())

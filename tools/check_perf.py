@@ -235,7 +235,9 @@ def main() -> int:
         action="store_true",
         help="keep the base worktree after the check",
     )
+    timing.add_argument(parser)
     args = parser.parse_args()
+    timing.configure(args.timings)
 
     base_ref = args.base or git("merge-base", "HEAD", "main")
     base_ref = git("rev-parse", base_ref)
@@ -346,6 +348,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    from utils.timing import run_with_timings
-
-    sys.exit(run_with_timings(main))
+    sys.exit(main())
