@@ -187,7 +187,7 @@ static bool scan_cond_pattern_paren(TSLexer *lexer) {
       return false;
     }
     const int32_t c = lexer->lookahead;
-    if (c == '"') {
+    if (c == '"' || c == '\'') {
       if (!skip_quoted(lexer)) {
         return false;
       }
