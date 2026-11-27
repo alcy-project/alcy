@@ -275,12 +275,39 @@ bool spells_zero(std::string_view spelling) {
   return zero;
 }
 
+bool spells_one(std::string_view spelling) {
+  usize at = 0;
+  if (spelling.size() >= 2 && spelling[0] == '0' &&
+      (spelling[1] == 'x' || spelling[1] == 'X' || spelling[1] == 'b' ||
+       spelling[1] == 'B' || spelling[1] == 'o' || spelling[1] == 'O')) {
+    at = 2;
+  }
+  bool one = false;
+  for (; at < spelling.size(); ++at) {
+    const char c = spelling[at];
+    if (c == '_') {
+      continue;
+    }
+    if (c == '1' && !one) {
+      one = true;
+      continue;
+    }
+    if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) {
+      break;
+    }
+    if (c != '0') {
+      return false;
+    }
+  }
+  return one;
+}
+
 // A cast of a negative integer literal to an unsigned type, e.g.
 // `-1 as u32`: the value wraps, and the arithmetic beside it panics on
 // overflow, so the cast is the one place a wrap happens without a
-// word. The finding states that; the spelling the reader meant is
-// theirs to choose, and the wrap is defined behavior they may have
-// meant exactly as written.
+// word. A magnitude of one wraps to the type's own maximum, which now
+// has a name; any other magnitude has none and the finding only says
+// what happens.
 void check_negative_to_unsigned(LintContext& ctx, ast::ExprIdx expr) {
   const ast::ExprNode& node = ctx.ast.exprs[expr];
   if (node.kind != ast::ExprKind::Cast) {
@@ -320,8 +347,12 @@ void check_negative_to_unsigned(LintContext& ctx, ast::ExprIdx expr) {
   if (to == nullptr || !is_unsigned_tag(to->tag)) {
     return;
   }
-  ctx.report<i18n::Key::LintNegativeToUnsigned>(node.span,
-                                                ir::type_to_str(to->tag));
+  const std::string_view type_name = ir::type_to_str(to->tag);
+  if (spells_one(literal.spelling)) {
+    ctx.report<i18n::Key::LintNegativeToUnsignedNamed>(node.span, type_name);
+  } else {
+    ctx.report<i18n::Key::LintNegativeToUnsigned>(node.span, type_name);
+  }
 }
 
 // The value a bool literal spells, or nullopt for anything else.
