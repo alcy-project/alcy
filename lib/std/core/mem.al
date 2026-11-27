@@ -85,11 +85,11 @@ pub intrinsic fn wrapping_mul<T>(a: T, b: T) -> T;
   }
 
   #[test] fn wrapping_add_rolls_a_byte_over() {
-    assert(wrapping_add(255u8, 1u8) == 0u8, "the sum is taken modulo 256")
+    assert(wrapping_add(u8::MAX, 1u8) == 0u8, "the sum is taken modulo 256")
   }
 
   #[test] fn wrapping_sub_rolls_a_byte_under() {
-    assert(wrapping_sub(0u8, 1u8) == 255u8, "the difference is taken modulo 256")
+    assert(wrapping_sub(0u8, 1u8) == u8::MAX, "the difference is taken modulo 256")
   }
 
   #[test] fn wrapping_mul_keeps_the_low_byte() {

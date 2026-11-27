@@ -329,10 +329,13 @@ impl<T: PartialOrd + PartialEq> Iterator < T > for RangeIter<T> {
 
   #[test] fn unsigned_range_reaches_the_top_of_its_width() {
     assert(
-      byte_count((250u8..=255u8).into_iter()) == 6,
+      byte_count((250u8..=u8::MAX).into_iter()) == 6,
       "the last six values of a byte are reachable",
     )
-    assert(byte_top((250u8..=255u8).into_iter()) == 255u8, "and the top one is the last")
+    assert(
+      byte_top((250u8..=u8::MAX).into_iter()) == u8::MAX,
+      "and the top one is the last",
+    )
   }
 
   #[test] fn for_loop_reads_the_range() {

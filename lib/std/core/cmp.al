@@ -595,8 +595,8 @@ impl PartialOrd for f64 {
   }
 
   #[test] fn cmp_orders_the_top_of_an_unsigned_width() {
-    top := 18446744073709551615u64
-    below := 18446744073709551614u64
+    top := u64::MAX
+    below := u64::MAX - 1u64
     assert(top.cmp(&below).is_gt(), "the maximum sorts above every other width value")
     assert(below.cmp(&top).is_lt(), "and every other width value sorts below it")
   }
