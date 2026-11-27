@@ -6,7 +6,7 @@ fn main() -> i32 {
   v.push(1)
   v.push(2)
   println("{}", v.remove(0))
-  v.remove(18446744073709551615usize)
+  v.remove(usize::MAX)
   println("unreachable")
   ret 0
 }

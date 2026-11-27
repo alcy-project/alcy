@@ -4,6 +4,6 @@
 // The allocator refuses it instead.
 
 fn main() -> i32 {
-  v := Vec::<u8>::with_capacity(18446744073709551615usize)
+  v := Vec::<u8>::with_capacity(usize::MAX)
   ret v.len() as i32
 }
