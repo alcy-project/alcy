@@ -552,4 +552,27 @@ TEST_CASE("A buffer without a manifest keeps the single-file reading") {
   CHECK(analysis.owner().root.as_view() == ".");
 }
 
+TEST_CASE("A file outside the manifest keeps the single-file reading") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_lsp_scratch_");
+  CHECK(dir.write_file("proj/alcy.toml", MANIFEST));
+  CHECK(dir.write_file("proj/main.al", MAIN));
+  const std::string root = std::string(dir.join("proj"));
+  const std::string scratch_uri = workspace::path_to_uri(root + "/scratch.al");
+  const std::string text = "fn scratch() -> i32 {\n  x := 1\n  ret x\n}\n";
+  CHECK(dir.write_file("proj/scratch.al", text));
+
+  const Document document(scratch_uri, "alcy", 1, text);
+  const DocumentAnalysis analysis(document);
+  CHECK(analysis.ok());
+  if (!analysis.ok()) {
+    return;
+  }
+  const std::optional<std::string> markdown =
+      hover_markdown(document, analysis, Position{1, 2});
+  CHECK(markdown.has_value());
+  if (markdown.has_value()) {
+    CHECK(markdown->find("i32") != std::string::npos);
+  }
+}
+
 }  // namespace lsp

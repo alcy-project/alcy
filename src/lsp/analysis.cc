@@ -248,6 +248,16 @@ std::unique_ptr<PackageAnalysis> build_analysis(
           .has_value();
   if (root.has_value() && !staged) {
     analyze_package(*out, buffers, focus_uri, *root);
+    // A file under a package root need not be a member of any artifact:
+    // an editor may open a scratch file beside the manifest. Only the
+    // stand-alone entry can answer for a file no artifact checked.
+    const auto focus = out->files_by_uri.find(std::string(focus_uri));
+    if (focus == out->files_by_uri.end() ||
+        !out->package_of.contains(focus->second)) {
+      out = std::make_unique<PackageAnalysis>(language);
+      out->encoding = encoding;
+      analyze_standalone(*out, buffers, focus_uri);
+    }
   } else {
     analyze_standalone(*out, buffers, focus_uri);
   }
