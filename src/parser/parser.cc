@@ -16,6 +16,7 @@
 #include "base/nesting.h"
 #include "diag/bag.h"
 #include "diag/span.h"
+#include "fpag/base/limits.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "i18n/messages.h"
@@ -2113,7 +2114,7 @@ bool Parser::parse_decimal_u64(u64* out) {
     // Reject rather than wrap: a wrapped length would silently become a
     // smaller array, or zero.
     const u64 digit = static_cast<u64>(c - '0');
-    if (value > (~0ull - digit) / 10) {
+    if (value > (U64_MAX - digit) / 10) {
       const u32 index = bag_.emit<i18n::Key::ParserArrayLengthTooLarge>(
           DiagCode::UnexpectedToken, span);
       (void)index;

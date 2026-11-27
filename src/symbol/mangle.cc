@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/nesting.h"
+#include "fpag/base/limits.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "ir/common.h"
@@ -357,7 +358,11 @@ class Decoder {
     const usize start = at_;
     u64 value = 0;
     while (!at_end() && text_[at_] >= '0' && text_[at_] <= '9') {
-      value = value * 10 + static_cast<u64>(text_[at_] - '0');
+      const u64 digit = static_cast<u64>(text_[at_] - '0');
+      if (value > (U64_MAX - digit) / 10) {
+        return false;
+      }
+      value = value * 10 + digit;
       ++at_;
     }
     if (at_ == start) {
