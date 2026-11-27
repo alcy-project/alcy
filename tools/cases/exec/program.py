@@ -559,7 +559,7 @@ def run(
         expect.stdout if expect else None,
         list(expect.stdout_contains) if expect else [],
         stderr_contains,
-        [],
+        list(expect.walk_stderr_contains) if expect else [],
         proc,
     )
     problems += stream_problems
