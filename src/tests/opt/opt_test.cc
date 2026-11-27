@@ -92,7 +92,7 @@ ir::VerifiedStorage foldable_body() {
 
 TEST_CASE("Folding propagates a constant through every use") {
   base::Result<ir::VerifiedStorage, ir::VerificationError> optimized =
-      optimize(foldable_body());
+      optimize(foldable_body(), ir::PointerWidth::W64);
   CHECK(optimized.is_ok());
   if (optimized.is_err()) {
     return;
@@ -112,6 +112,69 @@ TEST_CASE("Folding propagates a constant through every use") {
   if (returned.is<ir::ImmutableIdx>()) {
     CHECK(storage->immutables()[returned.as_immutable()].as_u64_integer(
               ir::TypeTag::I32) == 9);
+  }
+}
+
+TEST_CASE("Folding a pointer-width shift respects the target width") {
+  // Unchecked shifts take their count modulo the type's width. On a
+  // 32-bit target, `1usize << 32` is `1 << 0`, not a 64-bit shift that
+  // a 32-bit word would truncate to zero.
+  ir::StorageBuilder builder;
+  const ir::TypeIdx usize = builder.primitive(ir::TypeTag::Usize);
+  const ir::ImmutableIdx one =
+      builder.immutable({.type = usize, .data = {.u64_value = 1}});
+  const ir::ImmutableIdx count =
+      builder.immutable({.type = usize, .data = {.u64_value = 32}});
+  ir::OperandSeq args;
+  args.push(builder.operand(ir::Operand::from_immutable(one, usize)));
+  args.push(builder.operand(ir::Operand::from_immutable(count, usize)));
+  const ir::InstructionIdx shift = builder.instr({
+      .op = ir::Opcode::ShiftLeft,
+      .flags = {},
+      .dst = ir::RegisterIdx(0),
+      .measure = ir::TypeIdx::invalid(),
+      .operands = args.finish(),
+  });
+  builder.reg({.type = usize, .def_idx = shift});
+  ir::OperandSeq ret_args;
+  ret_args.push(
+      builder.operand(ir::Operand::from_register(ir::RegisterIdx(0), usize)));
+  const ir::InstructionIdx ret = builder.instr({
+      .op = ir::Opcode::Ret,
+      .flags = {},
+      .dst = ir::RegisterIdx(base::INVALID_IDX),
+      .measure = ir::TypeIdx::invalid(),
+      .operands = ret_args.finish(),
+  });
+  ir::InstrSeq instrs;
+  instrs.push(shift);
+  instrs.push(ret);
+  const ir::BlockIdx block =
+      builder.block({.instrs = instrs.finish(), .block_params = {}});
+  builder.function({
+      .meta = {.return_type = usize,
+               .param_types = {},
+               .name = str::EMPTY_STRING_ID,
+               .path = str::EMPTY_STRING_ID,
+               .kind = ir::SymbolKind::Free,
+               .generics = ir::TypeIdxRange{}},
+      .blocks = {block, 1},
+  });
+  auto optimized =
+      optimize(std::move(builder).build().unwrap(), ir::PointerWidth::W32);
+  CHECK(optimized.is_ok());
+  if (optimized.is_err()) {
+    return;
+  }
+  ir::VerifiedStorage storage = std::move(optimized).unwrap();
+  CHECK(storage->instrs()[ir::InstructionIdx(0)].op == ir::Opcode::Noop);
+  const ir::Instruction& returned = storage->instrs()[ir::InstructionIdx(1)];
+  CHECK(returned.op == ir::Opcode::Ret);
+  const ir::Operand& value = storage->operands()[returned.operands.head()];
+  CHECK(value.is<ir::ImmutableIdx>());
+  if (value.is<ir::ImmutableIdx>()) {
+    CHECK(storage->immutables()[value.as_immutable()].as_u64_integer(
+              ir::TypeTag::Usize) == 1);
   }
 }
 
@@ -160,7 +223,7 @@ TEST_CASE("A constant zero divisor is not folded") {
       .blocks = {block, 1},
   });
   base::Result<ir::VerifiedStorage, ir::VerificationError> optimized =
-      optimize(std::move(builder).build().unwrap());
+      optimize(std::move(builder).build().unwrap(), ir::PointerWidth::W64);
   CHECK(optimized.is_ok());
   if (optimized.is_err()) {
     return;

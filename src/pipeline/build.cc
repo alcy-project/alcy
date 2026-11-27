@@ -92,7 +92,7 @@ base::Result<void, diag::Reported> optimize_package(
     PipelineContext& ctx,
     lowering::LoweredPackage& package) {
   base::Result<ir::VerifiedStorage, ir::VerificationError> optimized =
-      opt::optimize(std::move(package.storage));
+      opt::optimize(std::move(package.storage), ctx.target.width);
   if (optimized.is_err()) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineOptimizeFailed>(
         DiagCode::OptimizeFailed);

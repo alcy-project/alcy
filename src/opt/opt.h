@@ -5,6 +5,7 @@
 
 #include "fpag/base/result.h"
 #include "ir/storage.h"
+#include "ir/type.h"
 #include "ir/verifier.h"
 
 namespace opt {
@@ -21,6 +22,7 @@ namespace opt {
 // elision, allocation pairing) needs cross-block or cross-function
 // facts and lands as its own pass here.
 base::Result<ir::VerifiedStorage, ir::VerificationError> optimize(
-    ir::VerifiedStorage storage);
+    ir::VerifiedStorage storage,
+    ir::PointerWidth width);
 
 }  // namespace opt

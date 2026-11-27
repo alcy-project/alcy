@@ -30,26 +30,28 @@ using ir::Operand;
 using ir::StorageState;
 using ir::TypeTag;
 
-u32 bit_width(TypeTag tag) {
-  switch (tag) {
+u32 bit_width(TypeTag tag, ir::PointerWidth width) {
+  switch (ir::pointer_width_tag(tag, width)) {
     case TypeTag::I1: return 1;
     case TypeTag::I8:
-    case TypeTag::U8: return 8;
+    case TypeTag::U8:
+    case TypeTag::Char: return 8;
     case TypeTag::I16:
     case TypeTag::U16: return 16;
     case TypeTag::I32:
-    case TypeTag::U32: return 32;
+    case TypeTag::U32:
+    case TypeTag::Rune: return 32;
     default: return 64;
   }
 }
 
-u64 type_mask(TypeTag tag) {
-  const u32 bits = bit_width(tag);
+u64 type_mask(TypeTag tag, ir::PointerWidth width) {
+  const u32 bits = bit_width(tag, width);
   return bits >= 64 ? ~static_cast<u64>(0) : (static_cast<u64>(1) << bits) - 1;
 }
 
-i64 sign_extend(u64 value, TypeTag tag) {
-  const u32 bits = bit_width(tag);
+i64 sign_extend(u64 value, TypeTag tag, ir::PointerWidth width) {
+  const u32 bits = bit_width(tag, width);
   if (bits >= 64) {
     return static_cast<i64>(value);
   }
@@ -58,17 +60,25 @@ i64 sign_extend(u64 value, TypeTag tag) {
   return static_cast<i64>((masked ^ sign) - sign);
 }
 
-ir::Immutable integer_immutable(ir::TypeIdx type, TypeTag tag, u64 bits) {
+ir::Immutable integer_immutable(ir::TypeIdx type,
+                                TypeTag tag,
+                                u64 bits,
+                                ir::PointerWidth width) {
   ir::Immutable imm{.type = type, .data = {}};
-  switch (tag) {
+  // The reader selects the union member by the tag the type carries,
+  // so a folded value must be written into that same member. The
+  // pointer-width spellings are resolved by width before choosing it.
+  switch (ir::pointer_width_tag(tag, width)) {
     case TypeTag::I1: imm.data.i1_value = bits != 0; break;
     case TypeTag::I8: imm.data.i8_value = static_cast<i8>(bits); break;
-    case TypeTag::I16: imm.data.i16_value = static_cast<i16>(bits); break;
-    case TypeTag::I32: imm.data.i32_value = static_cast<i32>(bits); break;
-    case TypeTag::I64: imm.data.i64_value = static_cast<i64>(bits); break;
+    case TypeTag::Char: imm.data.u8_value = static_cast<u8>(bits); break;
     case TypeTag::U8: imm.data.u8_value = static_cast<u8>(bits); break;
+    case TypeTag::I16: imm.data.i16_value = static_cast<i16>(bits); break;
     case TypeTag::U16: imm.data.u16_value = static_cast<u16>(bits); break;
+    case TypeTag::I32: imm.data.i32_value = static_cast<i32>(bits); break;
+    case TypeTag::Rune: imm.data.u32_value = static_cast<u32>(bits); break;
     case TypeTag::U32: imm.data.u32_value = static_cast<u32>(bits); break;
+    case TypeTag::I64: imm.data.i64_value = static_cast<i64>(bits); break;
     default: imm.data.u64_value = bits; break;
   }
   return imm;
@@ -112,8 +122,13 @@ bool constant_of(const StorageState& state,
   return true;
 }
 
-bool fold_binary(Opcode op, TypeTag tag, u64 a, u64 b, u64& out) {
-  const u64 mask = type_mask(tag);
+bool fold_binary(Opcode op,
+                 TypeTag tag,
+                 u64 a,
+                 u64 b,
+                 u64& out,
+                 ir::PointerWidth width) {
+  const u64 mask = type_mask(tag, width);
   const bool signed_type = ir::is_signed_integer_type(tag);
   switch (op) {
     case Opcode::IntAdd: out = (a + b) & mask; return true;
@@ -123,16 +138,16 @@ bool fold_binary(Opcode op, TypeTag tag, u64 a, u64 b, u64& out) {
     case Opcode::Or: out = (a | b) & mask; return true;
     case Opcode::Xor: out = (a ^ b) & mask; return true;
     case Opcode::ShiftLeft:
-      out = (a << (b & (bit_width(tag) - 1))) & mask;
+      out = (a << (b & (bit_width(tag, width) - 1))) & mask;
       return true;
     case Opcode::LogicalShiftRight:
-      out = (a & mask) >> (b & (bit_width(tag) - 1));
+      out = (a & mask) >> (b & (bit_width(tag, width) - 1));
       return true;
     case Opcode::ArithmeticShiftRight:
-      out = signed_type ? static_cast<u64>(sign_extend(a, tag) >>
-                                           (b & (bit_width(tag) - 1))) &
+      out = signed_type ? static_cast<u64>(sign_extend(a, tag, width) >>
+                                           (b & (bit_width(tag, width) - 1))) &
                               mask
-                        : (a & mask) >> (b & (bit_width(tag) - 1));
+                        : (a & mask) >> (b & (bit_width(tag, width) - 1));
       return true;
     case Opcode::IntDiv:
     case Opcode::IntRem: {
@@ -140,8 +155,8 @@ bool fold_binary(Opcode op, TypeTag tag, u64 a, u64 b, u64& out) {
         // The language panics; folding would hide the panic site.
         return false;
       }
-      const i64 sa = sign_extend(a, tag);
-      const i64 sb = sign_extend(b, tag);
+      const i64 sa = sign_extend(a, tag, width);
+      const i64 sb = sign_extend(b, tag, width);
       // `MIN / -1` wraps and `MIN % -1` is zero, the language's rule.
       if (sb == -1 && sa == std::numeric_limits<i64>::min()) {
         out = op == Opcode::IntDiv ? static_cast<u64>(sa) : 0;
@@ -167,23 +182,33 @@ bool fold_binary(Opcode op, TypeTag tag, u64 a, u64 b, u64& out) {
     case Opcode::Eq: out = a == b; return true;
     case Opcode::Ne: out = a != b; return true;
     case Opcode::Lt:
-      out = signed_type ? sign_extend(a, tag) < sign_extend(b, tag) : a < b;
+      out = signed_type
+                ? sign_extend(a, tag, width) < sign_extend(b, tag, width)
+                : a < b;
       return true;
     case Opcode::Le:
-      out = signed_type ? sign_extend(a, tag) <= sign_extend(b, tag) : a <= b;
+      out = signed_type
+                ? sign_extend(a, tag, width) <= sign_extend(b, tag, width)
+                : a <= b;
       return true;
     case Opcode::Gt:
-      out = signed_type ? sign_extend(a, tag) > sign_extend(b, tag) : a > b;
+      out = signed_type
+                ? sign_extend(a, tag, width) > sign_extend(b, tag, width)
+                : a > b;
       return true;
     case Opcode::Ge:
-      out = signed_type ? sign_extend(a, tag) >= sign_extend(b, tag) : a >= b;
+      out = signed_type
+                ? sign_extend(a, tag, width) >= sign_extend(b, tag, width)
+                : a >= b;
       return true;
     case Opcode::Not: out = (~a) & mask; return true;
     default: return false;
   }
 }
 
-void fold_and_propagate(StorageState& state, overlay::Checks& checks) {
+void fold_and_propagate(StorageState& state,
+                        overlay::Checks& checks,
+                        ir::PointerWidth width) {
   std::vector<Operand> known(state.registers.size(), unknown_operand());
   const usize count = state.instrs.size();
   for (usize i = 0; i < count; ++i) {
@@ -238,7 +263,7 @@ void fold_and_propagate(StorageState& state, overlay::Checks& checks) {
     // The fold ranks the operands' type: a comparison's destination is a
     // bool, and folding `-1i8 < 0i8` at bool's width compared the raw
     // words unsigned, where the source type is what ranks them.
-    if (!fold_binary(instr.op, a_tag, a, b, out)) {
+    if (!fold_binary(instr.op, a_tag, a, b, out, width)) {
       continue;
     }
     if (check == overlay::Check::Overflow) {
@@ -250,8 +275,8 @@ void fold_and_propagate(StorageState& state, overlay::Checks& checks) {
       }
       checks.kinds[i] = overlay::Check::None;
     }
-    const ir::ImmutableIdx imm =
-        state.immutables.push_back(integer_immutable(dst_type, dst_tag, out));
+    const ir::ImmutableIdx imm = state.immutables.push_back(
+        integer_immutable(dst_type, dst_tag, out, width));
     known[instr.dst.idx] = Operand::from_immutable(imm, dst_type);
   }
   // Every use of a known register takes the known value. Registers are
@@ -358,7 +383,8 @@ void eliminate_dead(StorageState& state, const overlay::Checks& checks) {
 }  // namespace
 
 base::Result<ir::VerifiedStorage, ir::VerificationError> optimize(
-    ir::VerifiedStorage storage) {
+    ir::VerifiedStorage storage,
+    ir::PointerWidth width) {
   ir::Storage plain = std::move(storage).unwrap();
   // What a checked build aborts on, read from the IR the passes receive:
   // the profile decides whether the checks exist, so the passes cannot
@@ -366,7 +392,7 @@ base::Result<ir::VerifiedStorage, ir::VerificationError> optimize(
   overlay::Checks checks = overlay::checked_instructions(plain);
   StorageState state = std::move(plain).take_state();
   DCHECK_EQ(checks.kinds.size(), state.instrs.size());
-  fold_and_propagate(state, checks);
+  fold_and_propagate(state, checks, width);
   eliminate_dead(state, checks);
   ir::StorageBuilder builder(std::move(state));
   return std::move(builder).build();
