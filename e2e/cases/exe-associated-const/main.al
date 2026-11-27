@@ -1,6 +1,8 @@
 // An associated const is a compile-time value under its owner type: it
 // names an array length and reads as an ordinary value.
-struct Limits { x: i32 }
+struct Limits {
+  x: i32,
+}
 
 impl Limits {
   pub const N: i32 := 4i32
