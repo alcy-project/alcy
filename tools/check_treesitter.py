@@ -109,9 +109,20 @@ def check_generated() -> bool:
     if not report("generate", generated):
         return False
     relative = str(GENERATED_DIR.relative_to(project_root_dir))
-    return report(
+    if not report(
         "generated sources", run(["git", "diff", "--exit-code", "--", relative])
+    ):
+        return False
+    status = run(
+        ["git", "status", "--porcelain", "--untracked-files=all", "--", relative]
     )
+    if status.stdout.strip():
+        print("generated sources: FAILED (untracked files)")
+        for line in status.stdout.strip().split("\n"):
+            print(f"  {line}")
+        return False
+    print("generated sources: ok (no untracked files)")
+    return True
 
 
 def check_corpus() -> bool:
