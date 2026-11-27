@@ -2066,7 +2066,10 @@ class Checker {
           }
         }
         check_place_use(moved, place, span, "move");
-        for (u32 id = 0; id < static_cast<u32>(loans.size()); ++id) {
+        const std::span<const u32> move_candidates =
+            loans.size() < K_ROOT_GROUP_MIN ? std::span<const u32>(loan_ids)
+                                            : conflicts_at_root(place, false);
+        for (const u32 id : move_candidates) {
           const Loan& loan = loans[id];
           if (loan.param != NO_ROOT) {
             continue;
@@ -2262,7 +2265,10 @@ class Checker {
         u32 target = NO_ROOT;
         if (operand_reg(0, target) && operand_place(0, place)) {
           kill_moved(moved, place);
-          for (u32 id = 0; id < static_cast<u32>(loans.size()); ++id) {
+          const std::span<const u32> assign_candidates =
+              loans.size() < K_ROOT_GROUP_MIN ? std::span<const u32>(loan_ids)
+                                              : conflicts_at_root(place, false);
+          for (const u32 id : assign_candidates) {
             const Loan& loan = loans[id];
             if (loan.param != NO_ROOT) {
               continue;
