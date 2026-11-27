@@ -15,7 +15,7 @@ fn main() -> i32 {
 
   mut total := 0i32
   for key in counts.keys() {
-    n := counts.get_at(key).or_panic_with_message("every key is present")
+    n := counts.get_at(key).or_panic("every key is present")
     println("{} {}", *key, *n)
     total = total + *n
   }

@@ -30,7 +30,7 @@ impl Scopes {
       self
       .frames
       .last_mut()
-      .or_panic_with_message("expected a value")
+      .or_panic("expected a value")
       .insert(String::from(name), kind)
     ret true
   }
@@ -39,7 +39,7 @@ impl Scopes {
     mut i := self.frames.len()
     while i > 0 {
       i = i - 1
-      match self.frames.at(i).or_panic_with_message("expected a value").get(String::from(name)) {
+      match self.frames.at(i).or_panic("expected a value").get(String::from(name)) {
         Option::Some(kind) => {
           ret Option::Some(*kind)
         }
@@ -56,26 +56,26 @@ fn main() -> i32 {
   if !s.define("x", 1) {
     ret 1
   }
-  if s.resolve("x").or_panic_with_message("expected a value") != 1 {
+  if s.resolve("x").or_panic("expected a value") != 1 {
     ret 2
   }
   _ := s.push()
   if !s.define("x", 2) {
     ret 3
   }
-  if s.resolve("x").or_panic_with_message("expected a value") != 2 {
+  if s.resolve("x").or_panic("expected a value") != 2 {
     ret 4
   }
   if !s.define("y", 5) {
     ret 5
   }
-  if s.resolve("y").or_panic_with_message("expected a value") != 5 {
+  if s.resolve("y").or_panic("expected a value") != 5 {
     ret 6
   }
   if !s.pop() {
     ret 7
   }
-  if s.resolve("x").or_panic_with_message("expected a value") != 1 {
+  if s.resolve("x").or_panic("expected a value") != 1 {
     ret 8
   }
   if s.resolve("y").is_some() {

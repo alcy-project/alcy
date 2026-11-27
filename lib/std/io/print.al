@@ -16,7 +16,7 @@ use sys::raw::write;
 use text::string::String;
 
 fn emit(fd: Fd, text: str) {
-  _ := write(fd, text).or_panic_with_message("writing stdout or stderr failed")
+  _ := write(fd, text).or_panic("writing stdout or stderr failed")
 }
 
 pub fn print(comp fmt: str, args: ..) {

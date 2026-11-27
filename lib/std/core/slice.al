@@ -146,7 +146,7 @@ impl<T>[T] {
   pub fn position(self: &Self, pred: (&T) -> bool) -> Option<usize> {
     mut i := 0 as usize
     while i < slice_len(self) {
-      if pred(self.at(i).or_panic_with_message("the index is within the slice")) {
+      if pred(self.at(i).or_panic("the index is within the slice")) {
         ret Option::Some(i)
       }
       i = i + 1
@@ -158,7 +158,7 @@ impl<T>[T] {
   pub fn find(self: &Self, pred: (&T) -> bool) -> Option<&T> {
     mut i := 0 as usize
     while i < slice_len(self) {
-      if pred(self.at(i).or_panic_with_message("the index is within the slice")) {
+      if pred(self.at(i).or_panic("the index is within the slice")) {
         ret self.at(i)
       }
       i = i + 1
@@ -171,7 +171,7 @@ impl<T>[T] {
     mut i := slice_len(self)
     while i > 0 {
       i = i - 1
-      if pred(self.at(i).or_panic_with_message("the index is within the slice")) {
+      if pred(self.at(i).or_panic("the index is within the slice")) {
         ret Option::Some(i)
       }
     }
@@ -184,8 +184,8 @@ impl<T>[T] {
     mut i := 1 as usize
     while i < slice_len(self) {
       if less(
-        self.at(i).or_panic_with_message("the index is within the slice"),
-        self.at(i - 1).or_panic_with_message("the index is within the slice"),
+        self.at(i).or_panic("the index is within the slice"),
+        self.at(i - 1).or_panic("the index is within the slice"),
       ) {
         ret false
       }
@@ -201,7 +201,7 @@ impl<T>[T] {
     mut hi := slice_len(self)
     while lo < hi {
       mid := lo + (hi - lo) / 2
-      c := compare(self.at(mid).or_panic_with_message("the index is within the slice"))
+      c := compare(self.at(mid).or_panic("the index is within the slice"))
       if c == 0 {
         ret Option::Some(mid)
       }
@@ -252,7 +252,7 @@ impl<T>[T] {
       ret Option::None
     }
     ret Option::Some(
-      (self.at(0).or_panic_with_message("the slice is not empty"), self.split_at(1).1)
+      (self.at(0).or_panic("the slice is not empty"), self.split_at(1).1)
     )
   }
 
@@ -263,7 +263,7 @@ impl<T>[T] {
       ret Option::None
     }
     ret Option::Some(
-      (self.at(n - 1).or_panic_with_message("the slice is not empty"), self.split_at(n - 1).0)
+      (self.at(n - 1).or_panic("the slice is not empty"), self.split_at(n - 1).0)
     )
   }
 
@@ -288,7 +288,7 @@ impl<T: PartialEq>[T] {
   pub fn contains(self: &Self, value: &T) -> bool {
     mut i := 0 as usize
     while i < slice_len(self) {
-      if *self.at(i).or_panic_with_message("the index is within the slice") == *value {
+      if *self.at(i).or_panic("the index is within the slice") == *value {
         ret true
       }
       i = i + 1
@@ -304,7 +304,7 @@ impl<T: PartialEq>[T] {
     }
     mut i := 0 as usize
     while i < n {
-      if *self.at(i).or_panic_with_message("the index is within the slice") != *prefix.at(i).or_panic_with_message(
+      if *self.at(i).or_panic("the index is within the slice") != *prefix.at(i).or_panic(
         "the index is within the slice"
       ) {
         ret false
@@ -323,7 +323,7 @@ impl<T: PartialEq>[T] {
     }
     mut i := 0 as usize
     while i < n {
-      if *self.at(m - n + i).or_panic_with_message("the index is within the slice") != *suffix.at(i).or_panic_with_message(
+      if *self.at(m - n + i).or_panic("the index is within the slice") != *suffix.at(i).or_panic(
         "the index is within the slice"
       ) {
         ret false
@@ -469,8 +469,8 @@ impl<T> Iterator < &mut T > for SliceIterMut<T> {
   #[test] fn at_reads_both_ends() {
     a := [1i32, 2i32, 3i32]
     s := a.as_slice()
-    assert(*s.at(0).or_panic_with_message("the first index is in bounds") == 1, "the first element")
-    assert(*s.at(2).or_panic_with_message("the last index is in bounds") == 3, "the last element")
+    assert(*s.at(0).or_panic("the first index is in bounds") == 1, "the first element")
+    assert(*s.at(2).or_panic("the last index is in bounds") == 3, "the last element")
   }
 
   #[test] fn at_past_the_last_index_is_none() {
@@ -481,8 +481,8 @@ impl<T> Iterator < &mut T > for SliceIterMut<T> {
   #[test] fn first_and_last_answer_the_ends() {
     a := [1i32, 2i32, 3i32]
     s := a.as_slice()
-    assert(*s.first().or_panic_with_message("the view is not empty") == 1, "the first element")
-    assert(*s.last().or_panic_with_message("the view is not empty") == 3, "the last element")
+    assert(*s.first().or_panic("the view is not empty") == 1, "the first element")
+    assert(*s.last().or_panic("the view is not empty") == 3, "the last element")
   }
 
   #[test] fn ends_of_an_empty_view_are_none() {
@@ -496,11 +496,11 @@ impl<T> Iterator < &mut T > for SliceIterMut<T> {
     a := [1i32, 2i32, 1i32]
     s := a.as_slice()
     assert(
-      s.position((x: &i32) -> *x == 1).or_panic_with_message("1 is in the view") == 0,
+      s.position((x: &i32) -> *x == 1).or_panic("1 is in the view") == 0,
       "the run holds two matches and the first one wins",
     )
     assert(
-      s.position((x: &i32) -> *x > 1).or_panic_with_message("2 is in the view") == 1,
+      s.position((x: &i32) -> *x > 1).or_panic("2 is in the view") == 1,
       "a predicate no earlier element accepts reports that later index",
     )
   }
@@ -515,7 +515,7 @@ impl<T> Iterator < &mut T > for SliceIterMut<T> {
 
   #[test] fn find_answers_the_first_match() {
     a := [1i32, 2i32, 1i32]
-    v := a.as_slice().find((x: &i32) -> *x > 1).or_panic_with_message("2 is in the view")
+    v := a.as_slice().find((x: &i32) -> *x > 1).or_panic("2 is in the view")
     assert(*v == 2, "the first element past the threshold")
   }
 
@@ -527,7 +527,7 @@ impl<T> Iterator < &mut T > for SliceIterMut<T> {
   #[test] fn rposition_reports_the_last_match() {
     a := [1i32, 2i32, 1i32]
     assert(
-      a.as_slice().rposition((x: &i32) -> *x == 1).or_panic_with_message("1 is in the view") == 2,
+      a.as_slice().rposition((x: &i32) -> *x == 1).or_panic("1 is in the view") == 2,
       "the search runs backwards",
     )
   }
@@ -573,11 +573,11 @@ impl<T> Iterator < &mut T > for SliceIterMut<T> {
     a := [1i32, 2i32, 3i32, 4i32, 5i32]
     s := a.as_slice()
     assert(
-      s.binary_search_by((x: &i32) -> *x - 1).or_panic_with_message("1 is in the view") == 0,
+      s.binary_search_by((x: &i32) -> *x - 1).or_panic("1 is in the view") == 0,
       "the first element",
     )
     assert(
-      s.binary_search_by((x: &i32) -> *x - 5).or_panic_with_message("5 is in the view") == 4,
+      s.binary_search_by((x: &i32) -> *x - 5).or_panic("5 is in the view") == 4,
       "the last element",
     )
   }
@@ -603,12 +603,12 @@ impl<T> Iterator < &mut T > for SliceIterMut<T> {
     pair := a.as_slice().split_at(2)
     assert(pair.0.len() == 2, "two elements sit before the split")
     assert(
-      *pair.0.at(1).or_panic_with_message("the head holds an index 1") == 2,
+      *pair.0.at(1).or_panic("the head holds an index 1") == 2,
       "the head ends at the split",
     )
     assert(pair.1.len() == 1, "one element sits after it")
     assert(
-      *pair.1.at(0).or_panic_with_message("the tail holds an index 0") == 3,
+      *pair.1.at(0).or_panic("the tail holds an index 0") == 3,
       "the tail starts at the split",
     )
   }
@@ -629,14 +629,14 @@ impl<T> Iterator < &mut T > for SliceIterMut<T> {
 
   #[test] fn split_first_reports_the_head_and_the_rest() {
     a := [1i32, 2i32, 3i32]
-    pair := a.as_slice().split_first().or_panic_with_message("the view is not empty")
+    pair := a.as_slice().split_first().or_panic("the view is not empty")
     assert(*pair.0 == 1, "the element that left")
     assert(pair.1.len() == 2, "the elements that stayed")
   }
 
   #[test] fn split_last_reports_the_tail_and_the_front() {
     a := [1i32, 2i32, 3i32]
-    pair := a.as_slice().split_last().or_panic_with_message("the view is not empty")
+    pair := a.as_slice().split_last().or_panic("the view is not empty")
     assert(*pair.0 == 3, "the element that left")
     assert(pair.1.len() == 2, "the elements that stayed")
   }
@@ -663,8 +663,8 @@ impl<T> Iterator < &mut T > for SliceIterMut<T> {
   #[test] fn cursor_stops_after_the_last_element() {
     a := [1i32, 2i32]
     mut it := a.as_slice().iter()
-    first := *it.next().or_panic_with_message("the view holds an index 0")
-    second := *it.next().or_panic_with_message("the view holds an index 1")
+    first := *it.next().or_panic("the view holds an index 0")
+    second := *it.next().or_panic("the view holds an index 1")
     assert(first == 1, "the cursor answered the first element")
     assert(second == 2, "and then the second")
     assert(it.next().is_none(), "one past the last element reads nothing")

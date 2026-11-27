@@ -75,6 +75,6 @@ pub fn collect<I: Iterator<T>, T>(mut iter: I) -> Vec<T> {
   }
 
   fn value(v: &Vec<i32>, i: usize) -> i32 {
-    ret *v.at(i).or_panic_with_message("the index is inside the vec")
+    ret *v.at(i).or_panic("the index is inside the vec")
   }
 }

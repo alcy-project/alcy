@@ -30,7 +30,7 @@ impl<T, E> Result<T, E> {
 
   // The contained value, or a panic whose message is `msg`. Prefer
   // `is_ok` or `?` where failure is expected rather than exceptional.
-  pub fn or_panic_with_message(self: Self, msg: str) -> T {
+  pub fn or_panic(self: Self, msg: str) -> T {
     ret match self {
       Result::Ok(v) => v,
       Result::Err(_) => panic(msg),
@@ -151,9 +151,9 @@ impl<T: Eq, E: Eq> Eq for Result<T, E> {
     assert(bad.or_else(() -> 9) == 9, "the fallback runs for a failure")
   }
 
-  #[test] fn or_panic_with_message_yields_the_value_of_an_ok() {
+  #[test] fn or_panic_yields_the_value_of_an_ok() {
     ok: Result<i32, str> := Result::Ok(7)
-    assert(ok.or_panic_with_message("a success has a value") == 7, "a success carries its value")
+    assert(ok.or_panic("a success has a value") == 7, "a success carries its value")
   }
 
   #[test] fn or_panic_with_yields_the_value_of_an_ok() {

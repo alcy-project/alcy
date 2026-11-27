@@ -203,8 +203,8 @@ impl Path {
     }
     mut i := 0 as usize
     while i < theirs.len() {
-      a := mine.at(i).or_panic_with_message("the component is in the path")
-      b := theirs.at(i).or_panic_with_message("the component is in the base")
+      a := mine.at(i).or_panic("the component is in the path")
+      b := theirs.at(i).or_panic("the component is in the base")
       if !unit_eq(a.as_slice(), b.as_slice()) {
         ret false
       }
@@ -223,8 +223,8 @@ impl Path {
     mut offset := mine.len() - theirs.len()
     mut i := 0 as usize
     while i < theirs.len() {
-      a := mine.at(offset + i).or_panic_with_message("the component is in the path")
-      b := theirs.at(i).or_panic_with_message("the component is in the base")
+      a := mine.at(offset + i).or_panic("the component is in the path")
+      b := theirs.at(i).or_panic("the component is in the base")
       if !unit_eq(a.as_slice(), b.as_slice()) {
         ret false
       }

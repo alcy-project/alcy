@@ -85,6 +85,14 @@ impl Scanner {
     }
   }
 
+  // The next token parsed as `T`, or a panic with `msg` when the input
+  // ends first or the token does not parse. This is the common case for
+  // a program that knows the token must be there; callers that want to
+  // handle a missing or malformed token use `next`.
+  pub fn next_or_panic<T: Parse>(mut self: &mut Self, msg: str) -> T {
+    ret self.next::<T>().or_panic(msg)
+  }
+
   // `count` tokens parsed as `T`, in order; the end of input before
   // the count is met answers `End`.
   pub fn next_vec<T: Parse>(mut self: &mut Self, count: usize) -> Result<Vec<T>, ScanError> {

@@ -12,7 +12,7 @@ fn main() -> i32 {
     inner()
   }
   outer()
-  w := holder.at(0).or_panic_with_message("none")
+  w := holder.at(0).or_panic("none")
   print("[{}]", *w)
   ret 0
 }

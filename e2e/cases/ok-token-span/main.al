@@ -11,7 +11,7 @@ struct Token {
 }
 
 fn slice_of(src: str, span: Span) -> str {
-  ret src.byte_slice(span.start, span.end).or_panic_with_message("spans lie on scalar boundaries")
+  ret src.byte_slice(span.start, span.end).or_panic("spans lie on scalar boundaries")
 }
 
 fn main() -> i32 {
@@ -22,7 +22,7 @@ fn main() -> i32 {
   if tokens.len() != 2 {
     ret 1
   }
-  t := tokens.at(0).or_panic_with_message("expected a value")
+  t := tokens.at(0).or_panic("expected a value")
   if t.kind != 1 {
     ret 2
   }
@@ -32,7 +32,7 @@ fn main() -> i32 {
   if slice_of(src, t.span) != "let" {
     ret 4
   }
-  if slice_of(src, tokens.at(1).or_panic_with_message("expected a value").span) != "x" {
+  if slice_of(src, tokens.at(1).or_panic("expected a value").span) != "x" {
     ret 5
   }
   ret 0

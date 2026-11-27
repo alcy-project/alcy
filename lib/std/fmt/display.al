@@ -38,7 +38,7 @@ impl Display for String {
     n := hello.display(unsafe { out.as_mut_slice() })
     assert(n == 5, "the count is the length of the rendering")
     assert(
-      out.byte_slice(0, 5).or_panic_with_message("the slice lands at the front") == "hello",
+      out.byte_slice(0, 5).or_panic("the slice lands at the front") == "hello",
       "the bytes land at the front",
     )
     assert(out.byte(5) == 0x2eu8, "the rest of the slice is untouched")
@@ -65,7 +65,7 @@ impl Display for String {
     n := hello.display(unsafe { out.as_mut_slice() })
     assert(n == 5, "the count is not truncated")
     assert(
-      out.byte_slice(0, 3).or_panic_with_message("the slice takes what fits") == "hel",
+      out.byte_slice(0, 3).or_panic("the slice takes what fits") == "hel",
       "the slice takes what fits",
     )
   }

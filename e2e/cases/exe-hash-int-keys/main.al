@@ -9,7 +9,7 @@ fn main() -> i32 {
   while i < 200 {
     k := (i % 7) as i64
     _ := counts.get_or_insert(k, 0)
-    mut slot := counts.get_mut(k).or_panic_with_message("the key was just inserted")
+    mut slot := counts.get_mut(k).or_panic("the key was just inserted")
     *slot = *slot + 1
     _ := seen.insert(k)
     i = i + 1
@@ -32,7 +32,7 @@ fn main() -> i32 {
   if seen.contains(9i64) {
     ret 6
   }
-  if counts.remove(0i64).or_panic_with_message("the key was there") != 29 {
+  if counts.remove(0i64).or_panic("the key was there") != 29 {
     ret 7
   }
   if counts.len() != 6 {

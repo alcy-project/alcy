@@ -8,7 +8,7 @@ fn main() -> i32 {
     v.push(buf.as_str())
     v
   }
-  w := views.at(0).or_panic_with_message("none")
+  w := views.at(0).or_panic("none")
   print("[{}]\n", *w)
   ret 0
 }

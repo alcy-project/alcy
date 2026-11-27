@@ -12,16 +12,16 @@ fn main() -> i32 {
       if back.len() != 4 {
         ret 2
       }
-      if *back.at(0).or_panic_with_message("first byte") != 0x41u8 {
+      if *back.at(0).or_panic("first byte") != 0x41u8 {
         ret 3
       }
-      if *back.at(1).or_panic_with_message("second byte") != 0xffu8 {
+      if *back.at(1).or_panic("second byte") != 0xffu8 {
         ret 4
       }
-      if *back.at(2).or_panic_with_message("third byte") != 0x00u8 {
+      if *back.at(2).or_panic("third byte") != 0x00u8 {
         ret 5
       }
-      if *back.at(3).or_panic_with_message("fourth byte") != 0x42u8 {
+      if *back.at(3).or_panic("fourth byte") != 0x42u8 {
         ret 6
       }
     }

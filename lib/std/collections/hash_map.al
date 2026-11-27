@@ -634,7 +634,7 @@ impl<K: Hash + Eq, V> Entry<K, V> {
     _ := m.insert(0, 1)
     replaced := m.insert(0, 2)
     assert(
-      replaced.or_panic_with_message("the key was there") == 1,
+      replaced.or_panic("the key was there") == 1,
       "the insert hands back what it replaced",
     )
     assert(m.len() == 1, "replacing a key does not add an entry")
@@ -654,7 +654,7 @@ impl<K: Hash + Eq, V> Entry<K, V> {
     _ := m.insert(1, 2)
     gone := m.remove(0)
     assert(
-      gone.or_panic_with_message("the key was there") == 1,
+      gone.or_panic("the key was there") == 1,
       "the removed entry's value comes back",
     )
     assert(m.len() == 1, "the removal shortens the map")
@@ -804,7 +804,7 @@ impl<K: Hash + Eq, V> Entry<K, V> {
   #[test] fn value_written_through_get_mut_is_the_one_read_back() {
     mut m := HashMap::<i32, i32>::new()
     _ := m.insert(0, 1)
-    slot := m.get_mut(0).or_panic_with_message("the key is there")
+    slot := m.get_mut(0).or_panic("the key is there")
     *slot = 7
     assert(value_at(&m, 0) == 7, "the write lands in the entry")
   }
@@ -862,10 +862,10 @@ impl<K: Hash + Eq, V> Entry<K, V> {
   }
 
   fn value_at(m: &HashMap < i32, i32 >, key: i32) -> i32 {
-    ret *m.get(key).or_panic_with_message("no entry for the key")
+    ret *m.get(key).or_panic("no entry for the key")
   }
 
   fn value_at_str(m: &HashMap < String, i32 >, key: String) -> i32 {
-    ret *m.get(key).or_panic_with_message("no entry for the key")
+    ret *m.get(key).or_panic("no entry for the key")
   }
 }

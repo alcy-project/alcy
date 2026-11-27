@@ -28,7 +28,7 @@ impl<T> Option<T> {
   // The contained value, or a panic whose message is `msg`. Prefer
   // `is_some` or `?` where absence is expected rather than
   // exceptional.
-  pub fn or_panic_with_message(self: Self, msg: str) -> T {
+  pub fn or_panic(self: Self, msg: str) -> T {
     ret match self {
       Option::Some(v) => v,
       Option::None => panic(msg),
@@ -167,7 +167,7 @@ impl<T: Eq> Eq for Option<T> {
   #[test] fn or_option_keeps_a_present_option() {
     kept := Option::Some(3).or_option(() -> Option::Some(9))
     assert(
-      kept.or_panic_with_message("a present option stays") == 3,
+      kept.or_panic("a present option stays") == 3,
       "a present option is not replaced",
     )
   }
@@ -175,7 +175,7 @@ impl<T: Eq> Eq for Option<T> {
   #[test] fn or_option_falls_back_to_the_next_option() {
     taken := absent().or_option(() -> Option::Some(9))
     assert(
-      taken.or_panic_with_message("the fallback is present") == 9,
+      taken.or_panic("the fallback is present") == 9,
       "the fallback supplies the value",
     )
   }
@@ -189,7 +189,7 @@ impl<T: Eq> Eq for Option<T> {
 
   #[test] fn filter_keeps_a_value_the_predicate_accepts() {
     kept := Option::Some(4).filter((x: &i32) -> *x == 4)
-    assert(kept.or_panic_with_message("the value is kept") == 4, "an accepted value survives")
+    assert(kept.or_panic("the value is kept") == 4, "an accepted value survives")
   }
 
   #[test] fn filter_drops_a_value_the_predicate_rejects() {
@@ -203,7 +203,7 @@ impl<T: Eq> Eq for Option<T> {
   #[test] fn map_transforms_the_contained_value() {
     mapped := Option::Some(3).map::<i32>((x: i32) -> x * 10)
     assert(
-      mapped.or_panic_with_message("the value is mapped") == 30,
+      mapped.or_panic("the value is mapped") == 30,
       "the payload goes through the mapping",
     )
   }
@@ -215,7 +215,7 @@ impl<T: Eq> Eq for Option<T> {
   #[test] fn map_can_change_the_payload_type() {
     mapped := Option::Some(3).map::<bool>((x: i32) -> x > 0)
     assert(
-      mapped.or_panic_with_message("the value is mapped"),
+      mapped.or_panic("the value is mapped"),
       "the result carries the new payload",
     )
   }
@@ -223,7 +223,7 @@ impl<T: Eq> Eq for Option<T> {
   #[test] fn and_then_chains_a_present_value() {
     chained := Option::Some(3).and_then::<i32>((x: i32) -> Option::Some(x + 1))
     assert(
-      chained.or_panic_with_message("the chain stays present") == 4,
+      chained.or_panic("the chain stays present") == 4,
       "the second option decides the value",
     )
   }
@@ -243,7 +243,7 @@ impl<T: Eq> Eq for Option<T> {
   #[test] fn ok_or_wraps_a_present_value_as_ok() {
     wrapped := Option::Some(3).ok_or("absent")
     assert(wrapped.is_ok(), "a present value is a success")
-    assert(wrapped.or_panic_with_message("a present value is a success") == 3, "and keeps it")
+    assert(wrapped.or_panic("a present value is a success") == 3, "and keeps it")
   }
 
   #[test] fn ok_or_wraps_an_absence_as_err() {

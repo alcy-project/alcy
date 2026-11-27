@@ -19,7 +19,7 @@ fn main() -> i32 {
   if v.len() != 3 {
     ret 1
   }
-  if measure(v.pop().or_panic_with_message("expected a value")) != 5usize {
+  if measure(v.pop().or_panic("expected a value")) != 5usize {
     ret 2
   }
   if v.len() != 2 {
@@ -37,10 +37,10 @@ fn main() -> i32 {
   if v.len() != 1 {
     ret 6
   }
-  if v.at(0).or_panic_with_message("expected a value").len_bytes() != 4usize {
+  if v.at(0).or_panic("expected a value").len_bytes() != 4usize {
     ret 7
   }
-  if !v.at(0).or_panic_with_message("expected a value").starts_with("beta") {
+  if !v.at(0).or_panic("expected a value").starts_with("beta") {
     ret 8
   }
   v.clear()
@@ -59,11 +59,11 @@ fn main() -> i32 {
   if nested.len() != 2 {
     ret 10
   }
-  if inner_len(nested.pop().or_panic_with_message("expected a value")) != 1 {
+  if inner_len(nested.pop().or_panic("expected a value")) != 1 {
     ret 11
   }
   nested.clear()
-  if v.at(0).or_panic_with_message("expected a value").len_bytes() != 4usize {
+  if v.at(0).or_panic("expected a value").len_bytes() != 4usize {
     ret 12
   }
   println("ok")

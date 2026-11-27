@@ -211,7 +211,7 @@ impl<T: PartialOrd + PartialEq> Iterator < T > for RangeIter<T> {
 #[when(testing)] {
   #[test] fn range_yields_its_start_first() {
     first := find::<RangeIter<i32>, i32>((0..<5).into_iter(), (x: i32) -> true)
-    assert(first.or_panic_with_message("the range yields") == 0, "the start is the first value")
+    assert(first.or_panic("the range yields") == 0, "the start is the first value")
   }
 
   #[test] fn exclusive_end_is_not_yielded() {
@@ -240,7 +240,7 @@ impl<T: PartialOrd + PartialEq> Iterator < T > for RangeIter<T> {
 
   #[test] fn spent_cursor_yields_nothing_more() {
     mut it := (0..<1).into_iter()
-    assert(it.next().or_panic_with_message("the range yields") == 0, "the single value comes out")
+    assert(it.next().or_panic("the range yields") == 0, "the single value comes out")
     assert(it.next().is_none(), "the cursor is spent")
     assert(it.next().is_none(), "and stays spent")
   }
@@ -252,9 +252,9 @@ impl<T: PartialOrd + PartialEq> Iterator < T > for RangeIter<T> {
 
   #[test] fn open_end_keeps_yielding() {
     mut it := (5..).into_iter()
-    assert(it.next().or_panic_with_message("the range yields") == 5, "the start is the first value")
-    assert(it.next().or_panic_with_message("the range yields") == 6, "the next value follows")
-    assert(it.next().or_panic_with_message("the range yields") == 7, "and the one after that")
+    assert(it.next().or_panic("the range yields") == 5, "the start is the first value")
+    assert(it.next().or_panic("the range yields") == 6, "the next value follows")
+    assert(it.next().or_panic("the range yields") == 7, "and the one after that")
   }
 
   #[test] fn cursor_iterates_as_itself() {
@@ -353,7 +353,7 @@ impl<T: PartialOrd + PartialEq> Iterator < T > for RangeIter<T> {
   }
 
   fn top_of(r: RangeIter<i32>) -> i32 {
-    ret last::<RangeIter<i32>, i32>(r).or_panic_with_message("the range yields")
+    ret last::<RangeIter<i32>, i32>(r).or_panic("the range yields")
   }
 
   fn yields_nothing(r: RangeIter<i32>) -> bool {
@@ -365,7 +365,7 @@ impl<T: PartialOrd + PartialEq> Iterator < T > for RangeIter<T> {
   }
 
   fn byte_top(r: RangeIter<u8>) -> u8 {
-    ret last::<RangeIter<u8>, u8>(r).or_panic_with_message("the range yields")
+    ret last::<RangeIter<u8>, u8>(r).or_panic("the range yields")
   }
 
   fn assert(ok: bool, what: str) {

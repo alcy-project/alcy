@@ -410,40 +410,40 @@ impl Parse for f64 {
 #[when(testing)] {
   #[test] fn integer_reads_its_decimal_text() {
     assert(
-      i64::parse("42").or_panic_with_message("42 is a number") == 42i64,
+      i64::parse("42").or_panic("42 is a number") == 42i64,
       "two digits read as twenty-two plus twenty",
     )
     assert(
-      i64::parse("7").or_panic_with_message("7 is a number") == 7i64,
+      i64::parse("7").or_panic("7 is a number") == 7i64,
       "a single digit reads on its own",
     )
   }
 
   #[test] fn leading_plus_is_read_and_not_counted() {
     assert(
-      i64::parse("+42").or_panic_with_message("+42 is a number") == 42i64,
+      i64::parse("+42").or_panic("+42 is a number") == 42i64,
       "the sign is not a digit",
     )
   }
 
   #[test] fn leading_minus_makes_the_value_negative() {
     assert(
-      i64::parse("-42").or_panic_with_message("-42 is a number") == 0i64 - 42i64,
+      i64::parse("-42").or_panic("-42 is a number") == 0i64 - 42i64,
       "the sign applies to the magnitude",
     )
   }
 
   #[test] fn zero_reads_as_zero() {
-    assert(i64::parse("0").or_panic_with_message("0 is a number") == 0i64, "one zero digit")
+    assert(i64::parse("0").or_panic("0 is a number") == 0i64, "one zero digit")
     assert(
-      i64::parse("-0").or_panic_with_message("-0 is a number") == 0i64,
+      i64::parse("-0").or_panic("-0 is a number") == 0i64,
       "a signed zero is still zero",
     )
   }
 
   #[test] fn leading_zeros_do_not_change_the_value() {
     assert(
-      i64::parse("007").or_panic_with_message("007 is a number") == 7i64,
+      i64::parse("007").or_panic("007 is a number") == 7i64,
       "the zeros add no magnitude",
     )
   }
@@ -470,7 +470,7 @@ impl Parse for f64 {
   #[test] fn largest_i64_reads_back() {
     assert(
       i64::parse("9223372036854775807")
-        .or_panic_with_message("the maximum is a number") ==
+        .or_panic("the maximum is a number") ==
         9223372036854775807i64,
       "every digit of the maximum is read",
     )
@@ -479,7 +479,7 @@ impl Parse for f64 {
   #[test] fn smallest_i64_reads_back() {
     assert(
       i64::parse("-9223372036854775808")
-        .or_panic_with_message("the minimum is a number") ==
+        .or_panic("the minimum is a number") ==
         0i64 -
         9223372036854775807i64 -
         1i64,
@@ -500,12 +500,12 @@ impl Parse for f64 {
 
   #[test] fn i32_reads_its_own_bounds() {
     assert(
-      i32::parse("2147483647").or_panic_with_message("the maximum fits") == 2147483647i32,
+      i32::parse("2147483647").or_panic("the maximum fits") == 2147483647i32,
       "the maximum",
     )
     assert(
       i32::parse("-2147483648")
-        .or_panic_with_message("the minimum fits") ==
+        .or_panic("the minimum fits") ==
         0i32 -
         2147483647i32 -
         1i32,
@@ -525,7 +525,7 @@ impl Parse for f64 {
   #[test] fn u64_reads_its_own_maximum() {
     assert(
       u64::parse("18446744073709551615")
-        .or_panic_with_message("the maximum fits") ==
+        .or_panic("the maximum fits") ==
         18446744073709551615u64,
       "every digit of the maximum is read",
     )
@@ -534,7 +534,7 @@ impl Parse for f64 {
 
   #[test] fn u32_rejects_what_only_a_u64_holds() {
     assert(
-      u32::parse("4294967295").or_panic_with_message("the maximum fits") == 4294967295u32,
+      u32::parse("4294967295").or_panic("the maximum fits") == 4294967295u32,
       "the maximum",
     )
     assert(u32::parse("4294967296").is_none(), "one past it overflows")
@@ -542,28 +542,28 @@ impl Parse for f64 {
 
   #[test] fn fraction_reads_its_text() {
     assert(
-      f64::parse("1.5").or_panic_with_message("1.5 is a number") == 1.5f64,
+      f64::parse("1.5").or_panic("1.5 is a number") == 1.5f64,
       "the point separates the halves",
     )
   }
 
   #[test] fn float_without_a_point_reads_as_a_whole_number() {
     assert(
-      f64::parse("42").or_panic_with_message("42 is a number") == 42.0f64,
+      f64::parse("42").or_panic("42 is a number") == 42.0f64,
       "the fraction may be left out",
     )
   }
 
   #[test] fn leading_point_reads_as_a_fraction() {
     assert(
-      f64::parse(".5").or_panic_with_message(".5 is a number") == 0.5f64,
+      f64::parse(".5").or_panic(".5 is a number") == 0.5f64,
       "the digits before the point may be left out",
     )
   }
 
   #[test] fn trailing_point_reads_as_a_whole_number() {
     assert(
-      f64::parse("5.").or_panic_with_message("5. is a number") == 5.0f64,
+      f64::parse("5.").or_panic("5. is a number") == 5.0f64,
       "the digits after the point may be left out",
     )
   }
@@ -577,14 +577,14 @@ impl Parse for f64 {
   }
 
   #[test] fn float_keeps_the_sign_of_a_zero() {
-    zero := f64::parse("-0.0").or_panic_with_message("-0.0 is a number")
+    zero := f64::parse("-0.0").or_panic("-0.0 is a number")
     assert(zero == 0.0f64, "the value is zero")
     assert(1.0f64 / zero < 0.0f64, "and the reciprocal is negative, so the sign survived")
   }
 
   #[test] fn exponent_is_read() {
     assert(
-      f64::parse("1e10").or_panic_with_message("1e10 is a number") == 1e10f64,
+      f64::parse("1e10").or_panic("1e10 is a number") == 1e10f64,
       "the exponent form the formatter writes reads back",
     )
   }
@@ -592,7 +592,7 @@ impl Parse for f64 {
   #[test] fn digits_past_the_significand_round_once() {
     assert(
       f64::parse("0.9876543210987654321")
-        .or_panic_with_message("the fraction is a number") ==
+        .or_panic("the fraction is a number") ==
         0.9876543210987654321f64,
       "text and a literal of the same digits agree bit for bit",
     )
@@ -601,7 +601,7 @@ impl Parse for f64 {
   #[test] fn long_fraction_reads_as_the_nearest_float() {
     assert(
       f64::parse("3.141592653589793238")
-        .or_panic_with_message("the fraction is a number") ==
+        .or_panic("the fraction is a number") ==
         3.141592653589793238f64,
       "the significand is assembled from the digits and rounded once, to nearest",
     )

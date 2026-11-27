@@ -4,10 +4,10 @@ fn main() -> i32 {
   if a.len() < 1 {
     ret 1
   }
-  if a.at(0).or_panic_with_message("expected a value").len() < 1 {
+  if a.at(0).or_panic("expected a value").len() < 1 {
     ret 2
   }
-  text := args_str().or_panic_with_message("the arguments are well-formed text")
+  text := args_str().or_panic("the arguments are well-formed text")
   if text.len() < 1 {
     ret 3
   }

@@ -10,7 +10,7 @@
   and `None`. Both compose as ordinary algebraic types for region
   purposes (field intersection and projection apply unchanged).
 - Core provides the `or` family (`or`, `or_else`, `or_option`,
-  `or_panic_with_message`, `or_panic_with`), the predicates (`is_some`,
+  `or_panic`, `or_panic_with`), the predicates (`is_some`,
   `is_none`, `is_ok`, `is_err`), and the closure combinators (`map`,
   `and_then`, `filter`, `ok_or`) as ordinary `impl` methods. No method
   named `unwrap` or `expect` exists, and none may be added:

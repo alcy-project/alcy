@@ -12,7 +12,7 @@ fn main() -> i32 {
     buf := String::from("abc")
     store(&mut holder, buf.as_str())
   }
-  w := holder.at(0).or_panic_with_message("none")
+  w := holder.at(0).or_panic("none")
   print("[{}]", w.0)
   ret 0
 }

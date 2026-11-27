@@ -8,7 +8,7 @@ fn main() -> i32 {
     holder.push(a.as_str())
   }
   f()
-  w := holder.at(0).or_panic_with_message("none")
+  w := holder.at(0).or_panic("none")
   print("[{}]", *w)
   ret 0
 }

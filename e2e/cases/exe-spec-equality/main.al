@@ -51,7 +51,7 @@ fn main() -> i32 {
   }
   // End the elements explicitly: dropping a `Vec` does not end what it
   // holds (see deferred.md), and the sanitized run checks for leaks.
-  sv := sa.pop().or_panic_with_message("expected a value")
-  sw := sb.pop().or_panic_with_message("expected a value")
+  sv := sa.pop().or_panic("expected a value")
+  sw := sb.pop().or_panic("expected a value")
   ret 0
 }

@@ -25,7 +25,7 @@ pub fn args() -> Vec<Vec<u8>> {
   mut out := Vec::<Vec<u8>>::with_capacity(n)
   mut i := 0 as usize
   while i < n {
-    out.push(arg_at(i).or_panic_with_message("the count is the argument count"))
+    out.push(arg_at(i).or_panic("the count is the argument count"))
     i = i + 1
   }
   ret out

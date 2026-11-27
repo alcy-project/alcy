@@ -536,7 +536,7 @@ pub fn join(parts: &Vec<String>, sep: str) -> String {
     if i > 0 {
       out.push_str(sep)
     }
-    out.push_str(parts.at(i).or_panic_with_message("the index is within the parts").as_str())
+    out.push_str(parts.at(i).or_panic("the index is within the parts").as_str())
     i = i + 1
   }
   ret out
@@ -630,25 +630,25 @@ pub fn join(parts: &Vec<String>, sep: str) -> String {
 
   #[test] fn insert_str_at_the_start_prefixes_the_text() {
     mut s := String::from("world")
-    s.insert_str(0, "hello ").or_panic_with_message("the offset is a boundary")
+    s.insert_str(0, "hello ").or_panic("the offset is a boundary")
     assert_text(s.as_str(), "hello world", "the run is now the prefix")
   }
 
   #[test] fn insert_str_between_two_halves() {
     mut s := String::from("ac")
-    s.insert_str(1, "b").or_panic_with_message("the offset is a boundary")
+    s.insert_str(1, "b").or_panic("the offset is a boundary")
     assert_text(s.as_str(), "abc", "the halves stay on their sides of the run")
   }
 
   #[test] fn insert_str_at_the_end_appends() {
     mut s := String::from("ab")
-    s.insert_str(2, "cd").or_panic_with_message("the offset is a boundary")
+    s.insert_str(2, "cd").or_panic("the offset is a boundary")
     assert_text(s.as_str(), "abcd", "inserting at the length appends")
   }
 
   #[test] fn insert_str_into_an_empty_string() {
     mut s := String::new()
-    s.insert_str(0, "hi").or_panic_with_message("the offset is a boundary")
+    s.insert_str(0, "hi").or_panic("the offset is a boundary")
     assert_text(s.as_str(), "hi", "an empty string takes the run whole")
     assert_count(s.len_bytes(), 2, "two bytes arrived")
   }
@@ -656,14 +656,14 @@ pub fn join(parts: &Vec<String>, sep: str) -> String {
   #[test] fn insert_str_into_a_full_buffer_shifts_past_the_room() {
     mut s := String::with_capacity(2)
     s.push_str("ab")
-    s.insert_str(1, "XYZ").or_panic_with_message("the offset is a boundary")
+    s.insert_str(1, "XYZ").or_panic("the offset is a boundary")
     assert_text(s.as_str(), "aXYZb", "the tail moved past the end of the old room")
     assert_count(s.len_bytes(), 5, "the length grew by the run")
   }
 
   #[test] fn insert_str_of_no_text_changes_nothing() {
     mut s := String::from("abc")
-    s.insert_str(1, "").or_panic_with_message("the offset is a boundary")
+    s.insert_str(1, "").or_panic("the offset is a boundary")
     assert_text(s.as_str(), "abc", "an empty run moves nothing")
     assert_count(s.len_bytes(), 3, "the length is untouched")
   }
@@ -672,21 +672,21 @@ pub fn join(parts: &Vec<String>, sep: str) -> String {
 
   #[test] fn truncate_keeps_the_first_bytes() {
     mut s := String::from("abcdef")
-    s.truncate(3).or_panic_with_message("the offset is a boundary")
+    s.truncate(3).or_panic("the offset is a boundary")
     assert_text(s.as_str(), "abc", "the kept prefix is the first bytes")
     assert_count(s.len_bytes(), 3, "the length is the new one")
   }
 
   #[test] fn truncate_to_zero_empties_the_string() {
     mut s := String::from("abc")
-    s.truncate(0).or_panic_with_message("the offset is a boundary")
+    s.truncate(0).or_panic("the offset is a boundary")
     assert(s.is_empty(), "nothing is left")
     assert_text(s.as_str(), "", "the view is empty")
   }
 
   #[test] fn truncate_to_the_length_changes_nothing() {
     mut s := String::from("abc")
-    s.truncate(3).or_panic_with_message("the offset is a boundary")
+    s.truncate(3).or_panic("the offset is a boundary")
     assert_text(s.as_str(), "abc", "the length is already n")
     assert_count(s.len_bytes(), 3, "the length is unchanged")
   }
@@ -700,7 +700,7 @@ pub fn join(parts: &Vec<String>, sep: str) -> String {
 
   #[test] fn byte_pushed_after_truncate_lands_at_the_new_end() {
     mut s := String::from("abcd")
-    s.truncate(2).or_panic_with_message("the offset is a boundary")
+    s.truncate(2).or_panic("the offset is a boundary")
     s.push_str("X")
     assert_text(s.as_str(), "abX", "the byte replaced the first dropped one")
     assert_count(s.len_bytes(), 3, "the length is the truncated one plus the push")
@@ -729,9 +729,9 @@ pub fn join(parts: &Vec<String>, sep: str) -> String {
     s := String::from("日本")
     bytes := s.as_bytes()
     assert_count(bytes.len(), 6, "the view is as long as the byte length")
-    first := bytes.at(0).or_panic_with_message("the byte is within the view")
+    first := bytes.at(0).or_panic("the byte is within the view")
     assert_byte(*first, 0xe6u8, "the first byte of the first scalar")
-    third := bytes.at(3).or_panic_with_message("the byte is within the view")
+    third := bytes.at(3).or_panic("the byte is within the view")
     assert_byte(*third, 0xe6u8, "the second scalar starts at byte three")
   }
 
@@ -935,7 +935,7 @@ pub fn join(parts: &Vec<String>, sep: str) -> String {
 
   #[test] fn find_answers_a_byte_offset() {
     s := String::from("héllo")
-    at := s.find("llo").or_panic_with_message("the needle is in the text")
+    at := s.find("llo").or_panic("the needle is in the text")
     assert_count(at, 3, "the offset counts bytes")
   }
 
@@ -952,7 +952,7 @@ pub fn join(parts: &Vec<String>, sep: str) -> String {
 
   #[test] fn strip_prefix_answers_the_remainder() {
     s := String::from("abc")
-    rest := s.strip_prefix("ab").or_panic_with_message("the prefix is there")
+    rest := s.strip_prefix("ab").or_panic("the prefix is there")
     assert_text(rest, "c", "the remainder follows the prefix")
     assert(s.strip_prefix("zz").is_none(), "a missing prefix has no remainder")
   }

@@ -605,15 +605,15 @@ impl PartialOrd for f64 {
     low := 1 as i8
     high := 2 as i8
     assert(
-      low.partial_cmp(&high).or_panic_with_message("two i8 values compare").is_lt(),
+      low.partial_cmp(&high).or_panic("two i8 values compare").is_lt(),
       "1 sorts below 2",
     )
     assert(
-      high.partial_cmp(&low).or_panic_with_message("two i8 values compare").is_gt(),
+      high.partial_cmp(&low).or_panic("two i8 values compare").is_gt(),
       "2 sorts above 1",
     )
     assert(
-      high.partial_cmp(&high).or_panic_with_message("two i8 values compare").is_eq(),
+      high.partial_cmp(&high).or_panic("two i8 values compare").is_eq(),
       "2 is equal to 2",
     )
   }
@@ -622,15 +622,15 @@ impl PartialOrd for f64 {
     low := 1.5f32
     high := 2.5f32
     assert(
-      low.partial_cmp(&high).or_panic_with_message("two f32 values compare").is_lt(),
+      low.partial_cmp(&high).or_panic("two f32 values compare").is_lt(),
       "1.5 sorts below 2.5",
     )
     assert(
-      high.partial_cmp(&low).or_panic_with_message("two f32 values compare").is_gt(),
+      high.partial_cmp(&low).or_panic("two f32 values compare").is_gt(),
       "2.5 sorts above 1.5",
     )
     assert(
-      low.partial_cmp(&low).or_panic_with_message("two f32 values compare").is_eq(),
+      low.partial_cmp(&low).or_panic("two f32 values compare").is_eq(),
       "a float is equal to itself",
     )
   }

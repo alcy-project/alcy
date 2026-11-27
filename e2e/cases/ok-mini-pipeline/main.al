@@ -62,12 +62,12 @@ fn report(src: str, tokens: &Vec<Token>, known: &HashMap < String, i32 >) -> Opt
   mut bad := 0
   mut i := 0 as usize
   while i < tokens.len() {
-    t := tokens.at(i).or_panic_with_message("expected a value")
+    t := tokens.at(i).or_panic("expected a value")
     if t.kind == 1 {
       word :=
         src
         .byte_slice(t.span.start, t.span.end)
-        .or_panic_with_message("spans lie on scalar boundaries")
+        .or_panic("spans lie on scalar boundaries")
       if !known.contains(String::from(word)) {
         text := format("unknown {}\n", word)
         out.push_str(text.as_str())

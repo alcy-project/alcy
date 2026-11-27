@@ -49,7 +49,7 @@ impl CStr {
 
 #[when(testing)] {
   #[test] fn from_ptr_reads_back_what_the_owner_put_in() {
-    owned := CString::from_str("borrowed").or_panic_with_message("a plain string")
+    owned := CString::from_str("borrowed").or_panic("a plain string")
     view := CStr::from_ptr(owned.as_ptr())
     match view.as_str() {
       Result::Ok(text) => {
@@ -65,13 +65,13 @@ impl CStr {
   #[test] fn length_stops_at_the_terminator() {
     owned :=
       CString::from_str("a string long enough to notice")
-      .or_panic_with_message("a plain string")
+      .or_panic("a plain string")
     view := CStr::from_ptr(owned.as_ptr())
     assert(view.len() == owned.len(), "the view counts as far as the terminator")
   }
 
   #[test] fn empty_view_is_one_terminator() {
-    owned := CString::from_str("").or_panic_with_message("an empty string")
+    owned := CString::from_str("").or_panic("an empty string")
     view := CStr::from_ptr(owned.as_ptr())
     assert(view.is_empty(), "the lone terminator reads as empty")
   }

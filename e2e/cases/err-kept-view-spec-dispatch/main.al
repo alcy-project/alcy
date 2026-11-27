@@ -26,7 +26,7 @@ fn main() -> i32 {
     x := String::from("abc")
     store(&mut b, x.as_str())
   }
-  w := b.v.at(0).or_panic_with_message("none")
+  w := b.v.at(0).or_panic("none")
   print("[{}]", *w)
   ret 0
 }

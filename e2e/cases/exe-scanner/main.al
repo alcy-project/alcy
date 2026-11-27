@@ -4,8 +4,8 @@
 
 fn main() -> i32 {
   mut sc := Scanner::stdin()
-  n := sc.next::<usize>().or_panic_with_message("n")
-  xs := sc.next_vec::<i64>(n).or_panic_with_message("xs")
+  n := sc.next::<usize>().or_panic("n")
+  xs := sc.next_vec::<i64>(n).or_panic("xs")
   mut sum := 0i64
   mut i := 0 as usize
   while i < n {

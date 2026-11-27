@@ -894,7 +894,7 @@ impl Iterator < str > for SplitIter {
   }
 
   #[test] fn strip_prefix_removes_a_prefix_it_finds() {
-    rest := "hello".strip_prefix("he").or_panic_with_message("the view starts with he")
+    rest := "hello".strip_prefix("he").or_panic("the view starts with he")
     assert(rest == "llo", "what follows the prefix is the rest")
   }
 
@@ -903,17 +903,17 @@ impl Iterator < str > for SplitIter {
   }
 
   #[test] fn strip_prefix_of_the_whole_text_is_empty() {
-    rest := "hello".strip_prefix("hello").or_panic_with_message("a view starts with itself")
+    rest := "hello".strip_prefix("hello").or_panic("a view starts with itself")
     assert(rest == "", "nothing follows a prefix that is the whole view")
   }
 
   #[test] fn strip_prefix_of_an_empty_prefix_is_the_whole_text() {
-    rest := "hello".strip_prefix("").or_panic_with_message("an empty prefix always matches")
+    rest := "hello".strip_prefix("").or_panic("an empty prefix always matches")
     assert(rest == "hello", "an empty prefix strips nothing")
   }
 
   #[test] fn strip_suffix_removes_a_suffix_it_finds() {
-    rest := "hello".strip_suffix("lo").or_panic_with_message("the view ends with lo")
+    rest := "hello".strip_suffix("lo").or_panic("the view ends with lo")
     assert(rest == "hel", "what precedes the suffix is the rest")
   }
 
@@ -922,7 +922,7 @@ impl Iterator < str > for SplitIter {
   }
 
   #[test] fn strip_suffix_of_the_whole_text_is_empty() {
-    rest := "hello".strip_suffix("hello").or_panic_with_message("a view ends with itself")
+    rest := "hello".strip_suffix("hello").or_panic("a view ends with itself")
     assert(rest == "", "nothing precedes a suffix that is the whole view")
   }
 
@@ -940,7 +940,7 @@ impl Iterator < str > for SplitIter {
   }
 
   #[test] fn find_reports_the_first_byte_offset() {
-    at := "banana".find("na").or_panic_with_message("the needle is there")
+    at := "banana".find("na").or_panic("the needle is there")
     assert(at == 2, "the first na starts at two")
   }
 
@@ -949,12 +949,12 @@ impl Iterator < str > for SplitIter {
   }
 
   #[test] fn find_of_the_empty_needle_is_zero() {
-    at := "banana".find("").or_panic_with_message("an empty needle is at the start")
+    at := "banana".find("").or_panic("an empty needle is at the start")
     assert(at == 0, "an empty needle appears before the first byte")
   }
 
   #[test] fn find_from_starts_the_search_at_the_offset() {
-    at := "banana".find_from(3, "na").or_panic_with_message("the second na is there")
+    at := "banana".find_from(3, "na").or_panic("the second na is there")
     assert(at == 4, "the search skips the match before from")
   }
 
@@ -963,12 +963,12 @@ impl Iterator < str > for SplitIter {
   }
 
   #[test] fn find_from_at_the_end_of_an_empty_needle_is_the_end() {
-    at := "banana".find_from(6, "").or_panic_with_message("the end is within the view")
+    at := "banana".find_from(6, "").or_panic("the end is within the view")
     assert(at == 6, "an empty needle at the end sits past the last byte")
   }
 
   #[test] fn find_byte_reports_the_first_index() {
-    at := "banana".find_byte(0x6eu8).or_panic_with_message("the byte is there")
+    at := "banana".find_byte(0x6eu8).or_panic("the byte is there")
     assert(at == 2, "the first n sits at two")
   }
 
@@ -977,7 +977,7 @@ impl Iterator < str > for SplitIter {
   }
 
   #[test] fn rfind_reports_the_last_offset() {
-    at := "banana".rfind("na").or_panic_with_message("the needle is there")
+    at := "banana".rfind("na").or_panic("the needle is there")
     assert(at == 4, "the last na starts at four")
   }
 
@@ -986,12 +986,12 @@ impl Iterator < str > for SplitIter {
   }
 
   #[test] fn rfind_of_the_empty_needle_is_the_end() {
-    at := "banana".rfind("").or_panic_with_message("an empty needle is at the end")
+    at := "banana".rfind("").or_panic("an empty needle is at the end")
     assert(at == 6, "an empty needle sits past the last byte")
   }
 
   #[test] fn rfind_byte_reports_the_last_index() {
-    at := "banana".rfind_byte(0x6eu8).or_panic_with_message("the byte is there")
+    at := "banana".rfind_byte(0x6eu8).or_panic("the byte is there")
     assert(at == 4, "the last n sits at four")
   }
 
@@ -1000,7 +1000,7 @@ impl Iterator < str > for SplitIter {
   }
 
   #[test] fn split_once_reports_the_bytes_either_side() {
-    (key, value) := "key=value".split_once("=").or_panic_with_message("the delimiter is there")
+    (key, value) := "key=value".split_once("=").or_panic("the delimiter is there")
     assert(key == "key", "the first piece precedes the delimiter")
     assert(value == "value", "the second piece follows it")
   }
@@ -1013,7 +1013,7 @@ impl Iterator < str > for SplitIter {
     (empty, rest) :=
       "key"
       .split_once("")
-      .or_panic_with_message("an empty delimiter is at the start")
+      .or_panic("an empty delimiter is at the start")
     assert(empty == "", "nothing precedes a delimiter at the start")
     assert(rest == "key", "the whole view follows it")
   }
@@ -1021,15 +1021,15 @@ impl Iterator < str > for SplitIter {
   #[test] fn split_yields_the_pieces_in_order() {
     mut it := "a,b,c".split(",")
     assert(
-      it.next().or_panic_with_message("three pieces") == "a",
+      it.next().or_panic("three pieces") == "a",
       "the first piece precedes the first delimiter",
     )
     assert(
-      it.next().or_panic_with_message("two more pieces") == "b",
+      it.next().or_panic("two more pieces") == "b",
       "the middle piece lies between the delimiters",
     )
     assert(
-      it.next().or_panic_with_message("one more piece") == "c",
+      it.next().or_panic("one more piece") == "c",
       "the last piece follows the last delimiter",
     )
     assert(it.next().is_none(), "the cursor is spent after the last piece")
@@ -1038,7 +1038,7 @@ impl Iterator < str > for SplitIter {
   #[test] fn split_without_the_delimiter_yields_the_whole_view() {
     mut it := "abc".split(",")
     assert(
-      it.next().or_panic_with_message("one piece") == "abc",
+      it.next().or_panic("one piece") == "abc",
       "a view with no delimiter is one piece",
     )
     assert(it.next().is_none(), "the cursor is spent after it")
@@ -1047,7 +1047,7 @@ impl Iterator < str > for SplitIter {
   #[test] fn split_of_an_empty_delimiter_yields_the_whole_view_once() {
     mut it := "abc".split("")
     assert(
-      it.next().or_panic_with_message("one piece") == "abc",
+      it.next().or_panic("one piece") == "abc",
       "an empty delimiter separates nothing",
     )
     assert(it.next().is_none(), "the cursor advances instead of repeating")
@@ -1056,7 +1056,7 @@ impl Iterator < str > for SplitIter {
   #[test] fn split_of_an_empty_text_yields_one_empty_piece() {
     mut it := "".split(",")
     assert(
-      it.next().or_panic_with_message("one piece") == "",
+      it.next().or_panic("one piece") == "",
       "a view of no bytes is one empty piece",
     )
     assert(it.next().is_none(), "the cursor is spent after it")
@@ -1064,9 +1064,9 @@ impl Iterator < str > for SplitIter {
 
   #[test] fn split_whitespace_skips_runs_of_space() {
     mut it := "  a \t b  ".split_whitespace()
-    assert(it.next().or_panic_with_message("two tokens") == "a", "leading runs are skipped")
+    assert(it.next().or_panic("two tokens") == "a", "leading runs are skipped")
     assert(
-      it.next().or_panic_with_message("one more token") == "b",
+      it.next().or_panic("one more token") == "b",
       "the run between tokens is skipped",
     )
     assert(it.next().is_none(), "the trailing run yields no token")
@@ -1079,26 +1079,26 @@ impl Iterator < str > for SplitIter {
   #[test] fn lines_separates_on_newline() {
     mut it := "a\nb".lines()
     assert(
-      it.next().or_panic_with_message("two lines") == "a",
+      it.next().or_panic("two lines") == "a",
       "the first line stops at the newline",
     )
-    assert(it.next().or_panic_with_message("one more line") == "b", "the last line runs to the end")
+    assert(it.next().or_panic("one more line") == "b", "the last line runs to the end")
     assert(it.next().is_none(), "the cursor is spent after the last line")
   }
 
   #[test] fn trailing_newline_does_not_yield_a_final_empty_line() {
     mut it := "a\n".lines()
-    assert(it.next().or_panic_with_message("one line") == "a", "the newline ends the last line")
+    assert(it.next().or_panic("one line") == "a", "the newline ends the last line")
     assert(it.next().is_none(), "what follows the newline is not a line")
   }
 
   #[test] fn trailing_carriage_return_is_dropped() {
     mut it := "a\r\nb".lines()
     assert(
-      it.next().or_panic_with_message("two lines") == "a",
+      it.next().or_panic("two lines") == "a",
       "the carriage return before the newline goes",
     )
-    assert(it.next().or_panic_with_message("one more line") == "b", "the later line is untouched")
+    assert(it.next().or_panic("one more line") == "b", "the later line is untouched")
   }
 
   #[test] fn blank_text_yields_no_lines() {
@@ -1108,15 +1108,15 @@ impl Iterator < str > for SplitIter {
   #[test] fn bytes_yields_each_byte_in_order() {
     mut it := "abc".bytes()
     assert(
-      it.next().or_panic_with_message("three bytes") == 0x61u8,
+      it.next().or_panic("three bytes") == 0x61u8,
       "the first byte is the first letter",
     )
     assert(
-      it.next().or_panic_with_message("two more bytes") == 0x62u8,
+      it.next().or_panic("two more bytes") == 0x62u8,
       "the second byte follows it",
     )
     assert(
-      it.next().or_panic_with_message("one more byte") == 0x63u8,
+      it.next().or_panic("one more byte") == 0x63u8,
       "the third byte is the last letter",
     )
     assert(it.next().is_none(), "the cursor is spent after the last byte")

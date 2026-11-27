@@ -188,7 +188,7 @@ impl<T> Vec<T> {
     mut state := acc
     mut i := 0 as usize
     while i < self.len {
-      state = step(state, self.at(i).or_panic_with_message("the index is within the vec"))
+      state = step(state, self.at(i).or_panic("the index is within the vec"))
       i = i + 1
     }
     ret state
@@ -212,7 +212,7 @@ impl<T> Vec<T> {
   pub fn all(self: &Self, pred: (&T) -> bool) -> bool {
     mut i := 0 as usize
     while i < self.len {
-      if !pred(self.at(i).or_panic_with_message("the index is within the vec")) {
+      if !pred(self.at(i).or_panic("the index is within the vec")) {
         ret false
       }
       i = i + 1
@@ -225,7 +225,7 @@ impl<T> Vec<T> {
   pub fn any(self: &Self, pred: (&T) -> bool) -> bool {
     mut i := 0 as usize
     while i < self.len {
-      if pred(self.at(i).or_panic_with_message("the index is within the vec")) {
+      if pred(self.at(i).or_panic("the index is within the vec")) {
         ret true
       }
       i = i + 1
@@ -238,7 +238,7 @@ impl<T> Vec<T> {
     mut i := self.len
     while i > 0 {
       i = i - 1
-      if pred(self.at(i).or_panic_with_message("the index is within the vec")) {
+      if pred(self.at(i).or_panic("the index is within the vec")) {
         ret Option::Some(i)
       }
     }
@@ -249,7 +249,7 @@ impl<T> Vec<T> {
   pub fn find(self: &Self, pred: (&T) -> bool) -> Option<&T> {
     mut i := 0 as usize
     while i < self.len {
-      if pred(self.at(i).or_panic_with_message("the index is within the vec")) {
+      if pred(self.at(i).or_panic("the index is within the vec")) {
         ret self.at(i)
       }
       i = i + 1
@@ -268,8 +268,8 @@ impl<T> Vec<T> {
     mut scan := 1 as usize
     while scan < self.len {
       if !same(
-        self.at(write - 1).or_panic_with_message("the index is within the vec"),
-        self.at(scan).or_panic_with_message("the index is within the vec"),
+        self.at(write - 1).or_panic("the index is within the vec"),
+        self.at(scan).or_panic("the index is within the vec"),
       ) {
         if write != scan {
           self.swap(write, scan)
@@ -294,7 +294,7 @@ impl<T> Vec<T> {
     mut hi := self.len
     while lo < hi {
       mid := lo + (hi - lo) / 2
-      c := compare(self.at(mid).or_panic_with_message("the index is within the vec"))
+      c := compare(self.at(mid).or_panic("the index is within the vec"))
       if c == 0 {
         ret Option::Some(mid)
       }
@@ -311,7 +311,7 @@ impl<T> Vec<T> {
   pub fn position(self: &Self, pred: (&T) -> bool) -> Option<usize> {
     mut i := 0 as usize
     while i < self.len {
-      if pred(self.at(i).or_panic_with_message("the index is within the vec")) {
+      if pred(self.at(i).or_panic("the index is within the vec")) {
         ret Option::Some(i)
       }
       i = i + 1
@@ -327,7 +327,7 @@ impl<T> Vec<T> {
     mut write := 0 as usize
     mut scan := 0 as usize
     while scan < self.len {
-      if keep(self.at(scan).or_panic_with_message("the index is within the vec")) {
+      if keep(self.at(scan).or_panic("the index is within the vec")) {
         self.swap(write, scan)
         write = write + 1
       }
@@ -387,7 +387,7 @@ impl<T> Vec<T> {
       self.swap(i, i + 1)
       i = i + 1
     }
-    ret self.pop().or_panic_with_message("the vec is not empty")
+    ret self.pop().or_panic("the vec is not empty")
   }
 
   // Removes and answers the element at `index`, moving the last
@@ -399,7 +399,7 @@ impl<T> Vec<T> {
       panic("Vec swap_remove index out of bounds")
     }
     self.swap(index, self.len - 1)
-    ret self.pop().or_panic_with_message("the vec is not empty")
+    ret self.pop().or_panic("the vec is not empty")
   }
 
   // Removes and returns the last element, or `None` when empty.
@@ -463,7 +463,7 @@ impl<T> Vec<T> {
     out.reserve(self.len)
     mut i := 0 as usize
     while i < self.len {
-      out.push(f(self.at(i).or_panic_with_message("the index is within the vec")))
+      out.push(f(self.at(i).or_panic("the index is within the vec")))
       i = i + 1
     }
     ret out
@@ -496,7 +496,7 @@ impl<T: PartialEq> Vec<T> {
   pub fn contains(self: &Self, value: &T) -> bool {
     mut i := 0 as usize
     while i < self.len {
-      if *self.at(i).or_panic_with_message("the index is within the vec") == *value {
+      if *self.at(i).or_panic("the index is within the vec") == *value {
         ret true
       }
       i = i + 1
@@ -618,13 +618,13 @@ impl<T> Iterator < &mut T > for VecIterMut<T> {
 // indexing does.
 impl<T> Index < usize, T > for Vec<T> {
   fn index(self: &Self, i: usize) -> &T {
-    ret self.at(i).or_panic_with_message("index out of bounds")
+    ret self.at(i).or_panic("index out of bounds")
   }
 }
 
 impl<T> IndexMut < usize, T > for Vec<T> {
   fn index_mut(mut self: &mut Self, i: usize) -> &mut T {
-    ret self.at_mut(i).or_panic_with_message("index out of bounds")
+    ret self.at_mut(i).or_panic("index out of bounds")
   }
 }
 
@@ -716,11 +716,11 @@ impl<T: PartialEq> PartialEq for Vec<T> {
     vals := [1i32, 2i32, 3i32]
     v := vec_of(vals.as_slice())
     assert(
-      *v.first().or_panic_with_message("the vec is not empty") == 1,
+      *v.first().or_panic("the vec is not empty") == 1,
       "the first element comes first",
     )
     assert(
-      *v.last().or_panic_with_message("the vec is not empty") == 3,
+      *v.last().or_panic("the vec is not empty") == 3,
       "the last element comes last",
     )
   }
@@ -728,7 +728,7 @@ impl<T: PartialEq> PartialEq for Vec<T> {
   #[test] fn at_mut_writes_through_to_the_element() {
     vals := [1i32, 2i32]
     mut v := vec_of(vals.as_slice())
-    slot := v.at_mut(1).or_panic_with_message("the index is inside the vec")
+    slot := v.at_mut(1).or_panic("the index is inside the vec")
     *slot = 9
     assert(value(&v, 1) == 9, "the write lands in the element at the index")
     assert(value(&v, 0) == 1, "the other element is untouched")
@@ -737,7 +737,7 @@ impl<T: PartialEq> PartialEq for Vec<T> {
   #[test] fn last_mut_names_the_last_element() {
     vals := [3i32, 4i32]
     mut v := vec_of(vals.as_slice())
-    slot := v.last_mut().or_panic_with_message("the vec is not empty")
+    slot := v.last_mut().or_panic("the vec is not empty")
     *slot = 5
     assert(value(&v, 1) == 5, "the write lands in the last element")
   }
@@ -746,12 +746,12 @@ impl<T: PartialEq> PartialEq for Vec<T> {
     vals := [1i32, 2i32]
     mut v := vec_of(vals.as_slice())
     assert(
-      v.pop().or_panic_with_message("the vec is not empty") == 2,
+      v.pop().or_panic("the vec is not empty") == 2,
       "the last element comes out first",
     )
     assert(v.len() == 1, "a pop shortens the vec")
     assert(
-      v.pop().or_panic_with_message("the vec is not empty") == 1,
+      v.pop().or_panic("the vec is not empty") == 1,
       "the element before it comes out next",
     )
     assert(v.pop().is_none(), "an emptied vec has nothing to hand back")
@@ -946,7 +946,7 @@ impl<T: PartialEq> PartialEq for Vec<T> {
   #[test] fn position_answers_the_first_index_the_predicate_accepts() {
     vals := [1i32, 2i32, 2i32]
     v := vec_of(vals.as_slice())
-    found := v.position((x: &i32) -> *x > 1).or_panic_with_message("an element is above one")
+    found := v.position((x: &i32) -> *x > 1).or_panic("an element is above one")
     assert(found == 1, "the first index the predicate accepts is the answer")
     assert(v.position((x: &i32) -> *x > 2).is_none(), "a predicate nothing accepts finds no index")
   }
@@ -954,7 +954,7 @@ impl<T: PartialEq> PartialEq for Vec<T> {
   #[test] fn rposition_answers_the_last_index_the_predicate_accepts() {
     vals := [1i32, 2i32, 2i32]
     v := vec_of(vals.as_slice())
-    found := v.rposition((x: &i32) -> *x > 1).or_panic_with_message("an element is above one")
+    found := v.rposition((x: &i32) -> *x > 1).or_panic("an element is above one")
     assert(found == 2, "the search runs from the end of the vec")
     assert(v.rposition((x: &i32) -> *x > 2).is_none(), "a predicate nothing accepts finds no index")
   }
@@ -963,7 +963,7 @@ impl<T: PartialEq> PartialEq for Vec<T> {
     vals := [1i32, 2i32, 3i32]
     v := vec_of(vals.as_slice())
     assert(
-      *v.find((x: &i32) -> *x > 1).or_panic_with_message("an element is above one") == 2,
+      *v.find((x: &i32) -> *x > 1).or_panic("an element is above one") == 2,
       "the first element the predicate accepts comes back",
     )
     assert(v.find((x: &i32) -> *x > 3).is_none(), "a predicate nothing accepts finds nothing")
@@ -972,7 +972,7 @@ impl<T: PartialEq> PartialEq for Vec<T> {
   #[test] fn binary_search_by_answers_the_index_of_a_match() {
     vals := [1i32, 3i32, 5i32]
     v := vec_of(vals.as_slice())
-    found := v.binary_search_by((x: &i32) -> *x - 3).or_panic_with_message("three sits in the vec")
+    found := v.binary_search_by((x: &i32) -> *x - 3).or_panic("three sits in the vec")
     assert(found == 1, "the compare that answers zero names the index")
     assert(
       v.binary_search_by((x: &i32) -> *x - 4).is_none(),
@@ -1024,11 +1024,11 @@ impl<T: PartialEq> PartialEq for Vec<T> {
     view := v.as_slice()
     assert(view.len() == 2, "the view has one element per element")
     assert(
-      *view.at(0).or_panic_with_message("the view holds an index 0") == 1,
+      *view.at(0).or_panic("the view holds an index 0") == 1,
       "the view reads the first element",
     )
     assert(
-      *view.at(1).or_panic_with_message("the view holds an index 1") == 2,
+      *view.at(1).or_panic("the view holds an index 1") == 2,
       "the view reads the last element",
     )
   }
@@ -1067,11 +1067,11 @@ impl<T: PartialEq> PartialEq for Vec<T> {
     vals := [1i32, 2i32]
     mut cursor := vec_of(vals.as_slice()).into_iter()
     assert(
-      cursor.next().or_panic_with_message("the cursor holds an index 0") == 1,
+      cursor.next().or_panic("the cursor holds an index 0") == 1,
       "the first element comes out",
     )
     assert(
-      cursor.next().or_panic_with_message("the cursor holds an index 1") == 2,
+      cursor.next().or_panic("the cursor holds an index 1") == 2,
       "then the second",
     )
     assert(cursor.next().is_none(), "one past the last element hands out nothing")
@@ -1093,7 +1093,7 @@ impl<T: PartialEq> PartialEq for Vec<T> {
   }
 
   fn value(v: &Vec<i32>, i: usize) -> i32 {
-    ret *v.at(i).or_panic_with_message("the index is inside the vec")
+    ret *v.at(i).or_panic("the index is inside the vec")
   }
 
   fn vec_of(values: &[i32]) -> Vec<i32> {

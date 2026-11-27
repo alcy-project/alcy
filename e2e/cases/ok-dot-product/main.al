@@ -12,10 +12,10 @@ fn dot(a: &Vec<i64>, b: &Vec<i64>) -> i64 {
       s +
       *a
       .at(i)
-      .or_panic_with_message("expected a value") *
+      .or_panic("expected a value") *
       *b
       .at(i)
-      .or_panic_with_message("expected a value")
+      .or_panic("expected a value")
     i = i + 1
   }
   ret s

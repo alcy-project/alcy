@@ -9,7 +9,7 @@ fn main() -> i32 {
   if !"a\tb".is_ascii() {
     ret 3
   }
-  s := String::from_slice([0xC3u8, 0xA9u8].as_slice()).or_panic_with_message("valid UTF-8")
+  s := String::from_slice([0xC3u8, 0xA9u8].as_slice()).or_panic("valid UTF-8")
   if s.is_ascii() {
     ret 4
   }

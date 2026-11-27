@@ -10,7 +10,7 @@ fn main() -> i32 {
     }
     *v = *v + 1
   }
-  if *m.get(String::from("a")).or_panic_with_message("expected a value") != 11 {
+  if *m.get(String::from("a")).or_panic("expected a value") != 11 {
     ret 2
   }
   {

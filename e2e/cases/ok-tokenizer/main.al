@@ -13,7 +13,7 @@ fn main() -> i32 {
         if c < 0x61u8 || c > 0x7au8 {
           break
         }
-        text.push_char(char_from_u8(c).or_panic_with_message("an ASCII letter"))
+        text.push_char(char_from_u8(c).or_panic("an ASCII letter"))
         i = i + 1
       }
       idents.push(text)
@@ -24,10 +24,10 @@ fn main() -> i32 {
   if idents.len() != 2 {
     ret 1
   }
-  if idents.at(0).or_panic_with_message("expected a value").as_str() != "let" {
+  if idents.at(0).or_panic("expected a value").as_str() != "let" {
     ret 2
   }
-  if idents.at(1).or_panic_with_message("expected a value").as_str() != "x" {
+  if idents.at(1).or_panic("expected a value").as_str() != "x" {
     ret 3
   }
   ret 0

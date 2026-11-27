@@ -10,12 +10,12 @@ fn main() -> i32 {
     }
     i = i + 1
   }
-  s := String::from_slice(out.as_slice()).or_panic_with_message("the copy is ASCII")
+  s := String::from_slice(out.as_slice()).or_panic("the copy is ASCII")
   if s.as_str() != "helloworld" {
     ret 1
   }
   nothing := Vec::<u8>::new()
-  t := String::from_slice(nothing.as_slice()).or_panic_with_message("empty decodes")
+  t := String::from_slice(nothing.as_slice()).or_panic("empty decodes")
   if t.len_bytes() != 0 {
     ret 2
   }

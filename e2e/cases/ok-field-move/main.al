@@ -12,7 +12,7 @@ fn main() -> i32 {
       if inner.len() != 1 {
         ret 1
       }
-      if *inner.at(0).or_panic_with_message("the vector holds one element") != 7 {
+      if *inner.at(0).or_panic("the vector holds one element") != 7 {
         ret 2
       }
     }

@@ -3,8 +3,8 @@
 // and removal leaves a tombstone that a later insert reuses.
 fn key(i: i32) -> String {
   mut s := String::with_capacity(2 as usize)
-  s.push_char(char_from_u8((48 + i / 10) as u8).or_panic_with_message("an ASCII digit"))
-  s.push_char(char_from_u8((48 + i % 10) as u8).or_panic_with_message("an ASCII digit"))
+  s.push_char(char_from_u8((48 + i / 10) as u8).or_panic("an ASCII digit"))
+  s.push_char(char_from_u8((48 + i % 10) as u8).or_panic("an ASCII digit"))
   ret s
 }
 
@@ -21,17 +21,17 @@ fn main() -> i32 {
   if m.len() != 2 {
     ret 3
   }
-  if *m.get(String::from("a")).or_panic_with_message("expected a value") != 1 {
+  if *m.get(String::from("a")).or_panic("expected a value") != 1 {
     ret 4
   }
-  mut q := m.get_mut(String::from("b")).or_panic_with_message("expected a value")
+  mut q := m.get_mut(String::from("b")).or_panic("expected a value")
   *q = 20i32
-  if *m.get(String::from("b")).or_panic_with_message("expected a value") != 20 {
+  if *m.get(String::from("b")).or_panic("expected a value") != 20 {
     ret 5
   }
   // Overwriting an existing key reports the old value and keeps the
   // length.
-  if m.insert(String::from("a"), 3i32).or_panic_with_message("expected a value") != 1 {
+  if m.insert(String::from("a"), 3i32).or_panic("expected a value") != 1 {
     ret 6
   }
   if m.len() != 2 {
@@ -40,7 +40,7 @@ fn main() -> i32 {
   if !m.contains(String::from("a")) {
     ret 8
   }
-  if m.remove(String::from("a")).or_panic_with_message("expected a value") != 3 {
+  if m.remove(String::from("a")).or_panic("expected a value") != 3 {
     ret 9
   }
   if m.len() != 1 {
@@ -70,7 +70,7 @@ fn main() -> i32 {
   i = 0
   while i < 50 {
     k := key(i)
-    if *m.get(k).or_panic_with_message("expected a value") != i + 100 {
+    if *m.get(k).or_panic("expected a value") != i + 100 {
       ret 13
     }
     i = i + 1
@@ -108,7 +108,7 @@ fn main() -> i32 {
     if i % 3 == 0 {
       want = i + 200
     }
-    if *m.get(k).or_panic_with_message("expected a value") != want {
+    if *m.get(k).or_panic("expected a value") != want {
       ret 17
     }
     i = i + 1

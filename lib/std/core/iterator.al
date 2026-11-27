@@ -259,8 +259,8 @@ pub fn skip<I: Iterator<T>, T>(iter: I, n: usize) -> SkipIter<I, T> {
   #[test] fn cursor_yields_none_after_the_last_value() {
     a := [1i32, 2i32]
     mut it := a.as_slice().iter()
-    first := *it.next().or_panic_with_message("the view holds an index 0")
-    second := *it.next().or_panic_with_message("the view holds an index 1")
+    first := *it.next().or_panic("the view holds an index 0")
+    second := *it.next().or_panic("the view holds an index 1")
     assert(first == 1, "the first value")
     assert(second == 2, "the second value")
     assert(it.next().is_none(), "the exhausted cursor answers none")
@@ -289,9 +289,9 @@ pub fn skip<I: Iterator<T>, T>(iter: I, n: usize) -> SkipIter<I, T> {
   #[test] fn enumerate_pairs_each_value_with_its_position() {
     a := [10i32, 20i32, 30i32]
     mut paired := enumerate(a.into_iter())
-    first := paired.next().or_panic_with_message("the source holds three values")
-    second := paired.next().or_panic_with_message("the source holds three values")
-    third := paired.next().or_panic_with_message("the source holds three values")
+    first := paired.next().or_panic("the source holds three values")
+    second := paired.next().or_panic("the source holds three values")
+    third := paired.next().or_panic("the source holds three values")
     assert(first.0 == 0, "the position of the first value counts from zero")
     assert(first.1 == 10, "the first value itself")
     assert(second.0 == 1, "the position counts on")
@@ -401,7 +401,7 @@ pub fn skip<I: Iterator<T>, T>(iter: I, n: usize) -> SkipIter<I, T> {
   #[test] fn position_reports_the_first_passing_value() {
     a := [1i32, 2i32, 3i32]
     assert(
-      position(a.into_iter(), (v: i32) -> v > 1i32).or_panic_with_message("a value passes") == 1,
+      position(a.into_iter(), (v: i32) -> v > 1i32).or_panic("a value passes") == 1,
       "the position counts from zero",
     )
   }
@@ -414,7 +414,7 @@ pub fn skip<I: Iterator<T>, T>(iter: I, n: usize) -> SkipIter<I, T> {
   #[test] fn find_answers_the_first_passing_value() {
     a := [1i32, 2i32, 3i32]
     assert(
-      find(a.into_iter(), (v: i32) -> v > 1i32).or_panic_with_message("a value passes") == 2,
+      find(a.into_iter(), (v: i32) -> v > 1i32).or_panic("a value passes") == 2,
       "the value, not its position",
     )
   }
@@ -427,7 +427,7 @@ pub fn skip<I: Iterator<T>, T>(iter: I, n: usize) -> SkipIter<I, T> {
   #[test] fn last_answers_the_final_value() {
     a := [1i32, 2i32, 3i32]
     assert(
-      last(a.into_iter()).or_panic_with_message("the source yields values") == 3,
+      last(a.into_iter()).or_panic("the source yields values") == 3,
       "the value the source ends on",
     )
   }

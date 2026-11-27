@@ -81,7 +81,7 @@ impl BufReader {
         ret Result::Ok(Option::None)
       }
     }
-    b := self.buf.at(self.pos).or_panic_with_message("the byte is within the buffer")
+    b := self.buf.at(self.pos).or_panic("the byte is within the buffer")
     self.pos = self.pos + 1
     ret Result::Ok(Option::Some(*b))
   }
@@ -100,7 +100,7 @@ impl BufReader {
       }
     }
     ret Result::Ok(
-      Option::Some(*self.buf.at(self.pos).or_panic_with_message("the byte is within the buffer"))
+      Option::Some(*self.buf.at(self.pos).or_panic("the byte is within the buffer"))
     )
   }
 

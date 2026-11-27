@@ -9,7 +9,7 @@ fn main() -> i32 {
       holder2.push(a2.as_str())
     }
     inner()
-    w := holder2.at(0).or_panic_with_message("none")
+    w := holder2.at(0).or_panic("none")
     print("[{}]", *w)
   }
   outer()

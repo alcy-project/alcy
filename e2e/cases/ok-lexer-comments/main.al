@@ -78,7 +78,7 @@ fn lex(src: str) -> Vec<Token> {
 fn text_of(src: str, t: &Token) -> str {
   ret src
     .byte_slice(t.span.start, t.span.end)
-    .or_panic_with_message("spans lie on scalar boundaries")
+    .or_panic("spans lie on scalar boundaries")
 }
 
 fn main() -> i32 {
@@ -87,13 +87,13 @@ fn main() -> i32 {
   if tokens.len() != 5 {
     ret 1
   }
-  if text_of(src, tokens.at(0).or_panic_with_message("expected a value")) != "let" {
+  if text_of(src, tokens.at(0).or_panic("expected a value")) != "let" {
     ret 2
   }
-  if text_of(src, tokens.at(3).or_panic_with_message("expected a value")) != "\"hi\"" {
+  if text_of(src, tokens.at(3).or_panic("expected a value")) != "\"hi\"" {
     ret 3
   }
-  if text_of(src, tokens.at(4).or_panic_with_message("expected a value")) != "+" {
+  if text_of(src, tokens.at(4).or_panic("expected a value")) != "+" {
     ret 4
   }
   ret 0

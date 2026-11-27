@@ -12,7 +12,7 @@ fn main() -> i32 {
   }
   match some {
     Option::Some(v) => {
-      if v.len() != 3 || *v.at(0).or_panic_with_message("index 0") != 1 {
+      if v.len() != 3 || *v.at(0).or_panic("index 0") != 1 {
         ret 2
       }
     }

@@ -8,7 +8,7 @@ fn main() -> i32 {
   words.push(String::from("berry"))
   mut i := 0 as usize
   while i < words.len() {
-    w := words.at(i).or_panic_with_message("expected a value")
+    w := words.at(i).or_panic("expected a value")
     mut key := String::with_capacity(1 as usize)
     match w.as_str().byte_slice(0, 1) {
       Option::Some(first) => {
