@@ -342,10 +342,14 @@ void eliminate_dead(StorageState& state, const overlay::Checks& checks) {
       if (checks.keeps(i) || !prunable(instr.op)) {
         continue;
       }
+      const ir::OperandIdxRange pruned = instr.operands;
       instr.op = Opcode::Noop;
       instr.dst = ir::RegisterIdx(base::INVALID_IDX);
       instr.measure = ir::TypeIdx::invalid();
       instr.operands = {};
+      for (ir::OperandIdx operand : pruned) {
+        state.operands[operand] = ir::Operand::invalid();
+      }
       changed = true;
     }
   }
