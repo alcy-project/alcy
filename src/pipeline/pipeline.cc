@@ -24,9 +24,8 @@
 #if BUILD_FLAG(IS_OS_WIN)
 // windows.h first, not the handful of SDK headers this file happens to
 // use: a bare <fileapi.h> reaches winnt.h before anything has defined
-// _AMD64, and winnt.h rejects that. It used to work because another header
-// in the chain pulled windows.h in first, so this compiled by accident until
-// fpag stopped doing that on purpose.
+// _AMD64, and winnt.h rejects that. Including windows.h here makes the
+// required order explicit instead of depending on another header.
 #include <windows.h>
 #else
 #include <dirent.h>

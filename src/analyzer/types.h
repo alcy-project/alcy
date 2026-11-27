@@ -45,12 +45,12 @@ constexpr std::string_view MAYBE_UNINIT_NAME = "MaybeUninit";
 // this for methods from inherent impl blocks.
 constexpr u32 NO_SPEC = 0xFFFFFFFFu;
 
-// Per-module type information for type checking and lowering. All TypeIdx
-// refer to the package Storage below; all views borrow source bytes.
 // How a reference uses the name it resolved to. The editor distinguishes
 // a write to a binding from a read when it highlights its sites.
 enum class ReferenceAccess : u8 { Read, Write };
 
+// Per-module type information for type checking and lowering. All TypeIdx
+// refer to the package Storage below; all views borrow source bytes.
 struct CheckedModule {
   u32 module;
 

@@ -19,7 +19,7 @@ namespace borrow {
 // (parameter positions whose loans may reach a return, computed to
 // a bounded fixed-point over the call graph) reified at call sites.
 // Findings accumulate in the bag; err marks a package that gained
-// errors. The cli still keys the exit code to the bag.
+// errors.
 base::Result<void, diag::Reported> check_borrows(
     const lowering::LoweredPackage& lowered,
     diag::DiagBag& bag,

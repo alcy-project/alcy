@@ -281,19 +281,25 @@ frames. Direct backends do no optimization and ignore the setting.
     unchecked: the result is in bounds exactly when the caller keeps
     `index` within the buffer's length, so the growable containers
     perform the bounds check before calling it.
+  - `elem_ref<T>(ptr: &MaybeUninit<T>, index: usize) -> &MaybeUninit<T>`
+    is the shared counterpart of `elem_ptr`. It is unchecked in the same
+    way: the caller keeps `index` within the buffer's length.
   - `uninit_write<T>(slot: &mut MaybeUninit<T>, value: T)` moves a
     value into an unwritten slot, leaving the slot initialized.
   - `uninit_assume<T>(slot: &mut MaybeUninit<T>) -> &mut T` releases a
     slot as a mutable reference to its value. Reading through the
     result before anything was written yields whatever the allocator
     returned.
+  - `uninit_ref<T>(slot: &MaybeUninit<T>) -> &T` is its shared
+    counterpart, with the same caveat about an unwritten slot.
   - `ptr_offset<T>(ptr: *T, count: isize) -> *T` offsets a raw
     pointer by whole elements; `ptr_offset_mut<T>` is its exclusive
     counterpart over `*mut T`. The count is signed, so one spelling
     moves both ways. The result is in bounds exactly when the caller
     keeps it within the buffer the pointer names.
-  - The allocation intrinsics are generic. `elem_ptr`, `dealloc`,
-    `uninit_write`, and `uninit_assume` recover `T` from the pointee of
+  - The allocation intrinsics are generic. `elem_ptr`, `elem_ref`,
+    `dealloc`, `uninit_write`, `uninit_assume`, and `uninit_ref` recover
+    `T` from the pointee of
     their reference argument, so a call admits one instantiation;
     `wrapping_add`, `wrapping_sub`, and `wrapping_mul` recover it from
     their arguments; `alloc`, `size_of`, and `align_of` have no
@@ -313,8 +319,9 @@ frames. Direct backends do no optimization and ignore the setting.
   (`ffi.md`). The checker verifies the marker against the set the way
   it verifies the shape, so leaving it out, or adding it to a safe
   intrinsic, is an error. The remaining intrinsics stay safe.
-- `print(comp fmt: str, args: ..)` and
-  `println(comp fmt: str, args: ..)` are `io`'s declarations,
+- `print(comp fmt: str, args: ..)`, `println(comp fmt: str, args: ..)`,
+  `eprint(comp fmt: str, args: ..)`, and `eprintln(comp fmt: str, args: ..)`
+  are `io`'s declarations,
   compiler-expanded like `fmt::format`: the format string is
   comp-known and the call's remaining arguments are collected at
   compile time (`fmt.md`). The declared bodies never run.

@@ -711,12 +711,10 @@ class Lowerer {
                           const std::vector<ir::TypeIdx>& args,
                           std::string& key);
   // The row a reservation names: the declaration, the instantiation,
-  // the signature, and the comp argument values. Used where a function
-  // is reserved and looked up. It is written into `key` so
-  // that a caller can hand in storage it reuses: every call site builds one of
-  // these. Creates the row a reservation names, so every function's index is
-  // decided when it is reserved: a clone or a synthesized body created
-  // in between can no longer take the index a later publish expects.
+  // the signature, and the comp argument values. A caller hands in the
+  // storage for `key`, which every call site builds. Creating the row
+  // here fixes every function's index at reservation time, so a clone
+  // or synthesized body cannot take the index a later publish expects.
   void reserve_function_row(const FnEntry& entry,
                             std::span<const ir::TypeIdx> params);
   // Reserves a function whose meta is already final and whose body the
@@ -732,7 +730,7 @@ class Lowerer {
               std::span<const CompVal> comp_args,
               std::span<const ir::TypeIdx> extra_generics = {});
   // Whether a signature names an IR type parameter, or a nominal whose
-  // member does: a call it decides records a parametric callee
+  // member does. A true answer records a parametric callee at the call.
   bool signature_mentions_param(const std::vector<ir::TypeIdx>& params,
                                 ir::TypeIdx ret,
                                 ir::TypeIdx owner) const;

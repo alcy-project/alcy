@@ -3,13 +3,9 @@
 
 // Properties that need no oracle beyond the code under test.
 //
-// The bug hunt behind this file found roughly nine semantic defects that
-// no sanitizer and no crash-only fuzzer can see, because each one
-// *answered*: a pattern that matched the wrong value, a format that
-// printed twenty digits, a manifest diagnostic one column off. What
-// catches those is a relation between two computations, not a
-// predicate about one. Each test below states such a relation, so it
-// either holds for every input or names a counterexample.
+// Each test states a relation between two computations over the same
+// input, so it either holds for every input or names a counterexample.
+// A crash-only check cannot see an answer that is merely wrong.
 
 #include <set>
 #include <string>

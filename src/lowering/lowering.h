@@ -34,7 +34,7 @@ namespace lowering {
 // `strings` (owned by the cli) interns function names and string
 // literal bytes for backend consumption.
 //
-// Supported input: straight-line functions - literals, locals, struct
+// Supported input: functions - literals, locals, struct
 // and tuple construction, field access, arithmetic/comparison/cast,
 // calls (free, associated, and methods), borrows, blocks, control
 // flow, `?`, indexing, enums (including generic instantiations), and
@@ -90,7 +90,7 @@ struct LoweredPackage {
   // storage's parametric list.
   usize prelude_functions = 0;
   // The package's public surface, for the summary a dependent reads
-  //. Empty when the package has no public items.
+  // Empty when the package has no public items.
   std::vector<ir::SummaryEntry> summary;
   // The field names the summary rows point into, one run per nominal
   // row; the rows borrow them. Growing the container moves the runs,

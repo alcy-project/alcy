@@ -1,12 +1,12 @@
 # Deferred Features (unordered)
 
-Tracked here so decisions stay compatible with one another. None of
-these are part of the language yet, and nothing here is in force until
-it is implemented.
+Tracked here so decisions stay compatible with one another. Items marked
+"not deferred" are in force; the rest are ideas, not language rules.
 
 ## Language
 
-- Destructor glue reaches a struct's or tuple's fields, an enum's live
+- Destructor glue is not deferred. It reaches a struct's or tuple's fields,
+  an enum's live
   variant after a discriminant read, and an array's elements in a loop.
   A move out of a type with its own `drop` is refused, except for a field
   of the destructor's own receiver, and `Vec::grow` moves elements rather
