@@ -181,13 +181,20 @@ bool load_summary_dependency(PipelineContext& ctx,
   bool verified = true;
   std::vector<base::Digest128> hashes = artifact.file_hashes;
   for (usize i = 0; i < artifact.file_names.size(); ++i) {
-    if (!io::is_file(artifact.file_names[i])) {
+    base::Result<source::FileId, source::SourceError> loaded =
+        ctx.sources.load(artifact.file_names[i]);
+    if (loaded.is_err()) {
       verified = false;
       break;
     }
-    const std::string source = io::read_file(artifact.file_names[i]);
+    const std::optional<std::string_view> source =
+        ctx.sources.bytes(std::move(loaded).unwrap());
+    if (!source.has_value()) {
+      verified = false;
+      break;
+    }
     const std::span<const u8> source_bytes(
-        reinterpret_cast<const u8*>(source.data()), source.size());
+        reinterpret_cast<const u8*>(source->data()), source->size());
     if (i < hashes.size()) {
       hashes[i] = base::hash128(source_bytes);
     }
