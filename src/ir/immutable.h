@@ -18,6 +18,10 @@ namespace ir {
 struct Immutable {
   TypeIdx type;
   union {
+    // First so `data = {}` zeroes all eight bytes: a narrower member
+    // initialized alone leaves the upper bytes of a later u64 read
+    // uninitialized on some ABIs.
+    u64 u64_value;
     bool i1_value;
     i8 i8_value;
     i16 i16_value;
@@ -27,7 +31,6 @@ struct Immutable {
     u8 u8_value;
     u16 u16_value;
     u32 u32_value;
-    u64 u64_value;
     // u128 u128_value;
     f32 f32_value;
     f64 f64_value;
