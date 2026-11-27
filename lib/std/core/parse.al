@@ -32,9 +32,9 @@ impl Parse for i64 {
     if i >= n {
       ret Option::None
     }
-    mut limit := 9223372036854775807u64
+    mut limit := i64::MAX as u64
     if negative {
-      limit = 9223372036854775808u64
+      limit = i64::MAX as u64 + 1u64
     }
     mut value := 0u64
     while i < n {
@@ -50,8 +50,8 @@ impl Parse for i64 {
       i = i + 1
     }
     if negative {
-      if value == 9223372036854775808u64 {
-        ret Option::Some(0i64 - 9223372036854775807i64 - 1i64)
+      if value == i64::MAX as u64 + 1u64 {
+        ret Option::Some(i64::MIN)
       }
       ret Option::Some(0i64 - (value as i64))
     }
@@ -64,7 +64,7 @@ impl Parse for i32 {
   fn parse(text: str) -> Option<i32> {
     match i64::parse(text) {
       Option::Some(v) => {
-        if v < 0i64 - 2147483647i64 - 1i64 || v > 2147483647i64 {
+        if v < i32::MIN as i64 || v > i32::MAX as i64 {
           ret Option::None
         }
         ret Option::Some(v as i32)
@@ -99,7 +99,7 @@ impl Parse for u64 {
         ret Option::None
       }
       digit := (d - 0x30u8) as u64
-      if value > (18446744073709551615u64 - digit) / 10u64 {
+      if value > (u64::MAX - digit) / 10u64 {
         ret Option::None
       }
       value = value * 10u64 + digit
@@ -114,7 +114,7 @@ impl Parse for u32 {
   fn parse(text: str) -> Option<u32> {
     match u64::parse(text) {
       Option::Some(v) => {
-        if v > 4294967295u64 {
+        if v > u32::MAX as u64 {
           ret Option::None
         }
         ret Option::Some(v as u32)
@@ -270,7 +270,7 @@ impl Parse for f64 {
         ret Option::None
       }
       digit := (d - 0x30u8) as u64
-      if numerator > (18446744073709551615u64 - digit) / 10u64 {
+      if numerator > (u64::MAX - digit) / 10u64 {
         ret Option::None
       }
       numerator = numerator * 10u64 + digit
@@ -469,20 +469,14 @@ impl Parse for f64 {
 
   #[test] fn largest_i64_reads_back() {
     assert(
-      i64::parse("9223372036854775807")
-        .or_panic("the maximum is a number") ==
-        9223372036854775807i64,
+      i64::parse("9223372036854775807").or_panic("the maximum is a number") == i64::MAX,
       "every digit of the maximum is read",
     )
   }
 
   #[test] fn smallest_i64_reads_back() {
     assert(
-      i64::parse("-9223372036854775808")
-        .or_panic("the minimum is a number") ==
-        0i64 -
-        9223372036854775807i64 -
-        1i64,
+      i64::parse("-9223372036854775808").or_panic("the minimum is a number") == i64::MIN,
       "the magnitude of the minimum is one past the maximum",
     )
   }
@@ -500,15 +494,11 @@ impl Parse for f64 {
 
   #[test] fn i32_reads_its_own_bounds() {
     assert(
-      i32::parse("2147483647").or_panic("the maximum fits") == 2147483647i32,
+      i32::parse("2147483647").or_panic("the maximum fits") == i32::MAX,
       "the maximum",
     )
     assert(
-      i32::parse("-2147483648")
-        .or_panic("the minimum fits") ==
-        0i32 -
-        2147483647i32 -
-        1i32,
+      i32::parse("-2147483648").or_panic("the minimum fits") == i32::MIN,
       "the minimum",
     )
   }
@@ -524,9 +514,7 @@ impl Parse for f64 {
 
   #[test] fn u64_reads_its_own_maximum() {
     assert(
-      u64::parse("18446744073709551615")
-        .or_panic("the maximum fits") ==
-        18446744073709551615u64,
+      u64::parse("18446744073709551615").or_panic("the maximum fits") == u64::MAX,
       "every digit of the maximum is read",
     )
     assert(u64::parse("18446744073709551616").is_none(), "one past it overflows")
@@ -534,7 +522,7 @@ impl Parse for f64 {
 
   #[test] fn u32_rejects_what_only_a_u64_holds() {
     assert(
-      u32::parse("4294967295").or_panic("the maximum fits") == 4294967295u32,
+      u32::parse("4294967295").or_panic("the maximum fits") == u32::MAX,
       "the maximum",
     )
     assert(u32::parse("4294967296").is_none(), "one past it overflows")

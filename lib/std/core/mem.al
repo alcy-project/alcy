@@ -98,7 +98,7 @@ pub intrinsic fn wrapping_mul<T>(a: T, b: T) -> T;
 
   #[test] fn wrapping_add_rolls_an_i32_to_its_minimum() {
     assert(
-      wrapping_add(2147483647i32, 1i32) == 0i32 - 2147483647i32 - 1i32,
+      wrapping_add(i32::MAX, 1i32) == i32::MIN,
       "one past the maximum is the minimum",
     )
   }
