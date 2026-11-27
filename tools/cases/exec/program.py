@@ -567,6 +567,10 @@ def run(
         for needle in expect.contains:
             if needle not in (proc.stdout + proc.stderr):
                 problems.append(f"missing output: {needle!r}")
+        combined = proc.stdout + proc.stderr
+        for needle in expect.not_contains:
+            if needle in combined:
+                problems.append(f"unexpected output: {needle!r}")
 
     # A sanitizer writes its report to stderr and exits non-zero, which
     # the exit check may already have caught. A marker names a report
