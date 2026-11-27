@@ -122,6 +122,17 @@ base::Result<std::string, std::string> title_of(const Blocks& blocks,
   return base::make_ok(blocks.front().text);
 }
 
+std::string plain_title(std::string_view title) {
+  std::string out;
+  out.reserve(title.size());
+  for (const char c : title) {
+    if (c != '`') {
+      out += c;
+    }
+  }
+  return out;
+}
+
 std::vector<DocPage> pages_for_language(const Catalog& catalog,
                                         const std::vector<DocSource>& sources,
                                         std::string_view language) {

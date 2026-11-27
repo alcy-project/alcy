@@ -194,7 +194,10 @@ std::string chapter_list(const DocPage& page,
     const std::string current =
         &other == &page ? " aria-current=\"page\"" : std::string();
     out += "        <li><a href=\"" + relative_route(page.route, other.route) +
-           "\"" + current + ">" + escape_html(other.title) + "</a></li>\n";
+           "\"" + current + ">" +
+           render_inline(other.title, options.resolve_link,
+                         options.resolve_context) +
+           "</a></li>\n";
   }
   out += "      </ol>\n    </nav>";
   return out;
@@ -323,7 +326,9 @@ std::string pager(const DocPage& page, const PageOptions& options) {
     const DocPage& previous = (*options.pages)[found - 1];
     back = "<a href=\"" + relative_route(page.route, previous.route) + "\">" +
            ARROW_LEFT + " " + t("site.previous") + " " + MIDDLE_DOT + " " +
-           escape_html(previous.title) + "</a>";
+           render_inline(previous.title, options.resolve_link,
+                         options.resolve_context) +
+           "</a>";
   } else {
     back = "<span class=\"empty\"></span>";
   }
@@ -334,7 +339,9 @@ std::string pager(const DocPage& page, const PageOptions& options) {
     const DocPage& next = (*options.pages)[found + 1];
     forward = "<a href=\"" + relative_route(page.route, next.route) + "\">" +
               t("site.next") + " " + MIDDLE_DOT + " " +
-              escape_html(next.title) + " " + ARROW_RIGHT + "</a>";
+              render_inline(next.title, options.resolve_link,
+                            options.resolve_context) +
+              " " + ARROW_RIGHT + "</a>";
   } else if (!options.tree->continues_into_segment.empty()) {
     const std::string prefix = page.language == catalog.default_language
                                    ? std::string()
@@ -470,7 +477,7 @@ std::string render_guide_page(const DocPage& page, const PageOptions& options) {
     article += block_html(block, options, heading_ids);
   }
   const std::string description =
-      std::string(page.title) + " " + MIDDLE_DOT + " " +
+      plain_title(page.title) + " " + MIDDLE_DOT + " " +
       translate(catalog, options.language, options.tree->summary_key);
   std::string out;
   // One page is tens of kilobytes; one reservation beats the growth
@@ -487,8 +494,8 @@ std::string render_guide_page(const DocPage& page, const PageOptions& options) {
       "initial-scale=1\" />\n";
   out += "    <meta name=\"description\" content=\"" +
          escape_html(description) + "\" />\n";
-  out += "    <title>" + escape_html(page.title) + " " + MIDDLE_DOT +
-         " Alcy</title>\n";
+  out += "    <title>" + escape_html(plain_title(page.title)) + " " +
+         MIDDLE_DOT + " Alcy</title>\n";
   out += "    <script>" + std::string(options.boot) + "</script>\n";
   out += "    " + catalog_map(assets, options.language) + "\n";
   out += "    <link rel=\"stylesheet\" href=\"" + assets +
@@ -506,7 +513,7 @@ std::string render_guide_page(const DocPage& page, const PageOptions& options) {
   out += "    <link rel=\"icon\" href=\"" + assets + "favicon.svg\" />\n";
   out += "    " + page_links(catalog, options.language, page.path) + "\n";
   out += "    " +
-         social_meta(std::string(page.title) + " " + MIDDLE_DOT + " Alcy",
+         social_meta(plain_title(page.title) + " " + MIDDLE_DOT + " Alcy",
                      description, page.route) +
          "\n";
   out += "    " + speculation_rules() + "\n";
@@ -604,7 +611,7 @@ std::string render_tree_index(const std::vector<DocPage>& pages,
   out += "      <h1>" + label + "</h1>\n      <ol>\n";
   for (const DocPage& page : pages) {
     out += "        <li><a href=\"" + relative_route(route, page.route) +
-           "\">" + escape_html(page.title) + "</a>";
+           "\">" + render_inline(page.title) + "</a>";
     const std::vector<GuideSection> sections = sections_of(page.blocks);
     if (!sections.empty()) {
       out += "<span class=\"index-sections\">";

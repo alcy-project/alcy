@@ -690,7 +690,8 @@ i32 run(i32 argc, char** argv) {
         "  {\n    \"route\": \"" + json_escape(source.path) + "\",\n";
     search_json +=
         "    \"language\": \"" + json_escape(source.language) + "\",\n";
-    search_json += "    \"title\": \"" + json_escape(source.title) + "\",\n";
+    search_json += "    \"title\": \"" +
+                   json_escape(ssg::plain_title(source.title)) + "\",\n";
     const std::vector<ssg::GuideSection> sections =
         ssg::sections_of(source.blocks);
     if (sections.empty()) {

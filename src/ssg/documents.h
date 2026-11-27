@@ -62,6 +62,10 @@ base::Result<std::vector<std::string>, std::string> markdown_files(
 base::Result<std::string, std::string> title_of(const Blocks& blocks,
                                                 std::string_view source_rel);
 
+// Backticks in a title mark inline code on the page, not text a reader
+// wants in a tab, a social card, or a search result.
+std::string plain_title(std::string_view title);
+
 std::vector<DocPage> pages_for_language(const Catalog& catalog,
                                         const std::vector<DocSource>& sources,
                                         std::string_view language);
