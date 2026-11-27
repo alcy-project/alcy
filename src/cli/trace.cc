@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/process_memory.h"
+#include "config/build_config.h"
 #include "fpag/debug/profiler/profiler.h"
 #include "fpag/debug/time_util.h"
 #include "pipeline/pipeline_context.h"
@@ -24,6 +25,10 @@ TraceSession::TraceSession(pipeline::PipelineContext& ctx, bool enabled)
     // which turns the peak the envelope prints into a curve the trace
     // viewers draw over the phases. The thread writes only samples_, and
     // the samples are read after join, so no lock guards them.
+    // Wasm has no thread to sample on, and current_memory_bytes()
+    // already returns zero there; starting one aborts in a build without
+    // exceptions.
+#if !BUILD_FLAG(IS_OS_ASMJS)
     sampling_ = true;
     sampler_ = std::thread([this] {
       while (sampling_) {
@@ -35,6 +40,7 @@ TraceSession::TraceSession(pipeline::PipelineContext& ctx, bool enabled)
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
       }
     });
+#endif
   }
 }
 

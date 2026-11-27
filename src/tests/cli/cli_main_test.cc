@@ -1115,7 +1115,9 @@ TEST_CASE("Time trace embeds its phases in the json result") {
   CHECK(document.find("\"borrow\"") != std::string::npos);
   // The resident set sampled on a cadence, as counter events a viewer
   // draws over the phases.
+#if !BUILD_FLAG(IS_OS_ASMJS)
   CHECK(document.find("\"vm_rss\"") != std::string::npos);
+#endif
   // One document and no second file to correlate with it.
   CHECK(!document.empty());
   CHECK(document.back() == '\n');
