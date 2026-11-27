@@ -188,6 +188,10 @@ u32 patch_word(const u32 word, const i32 delta) {
 
 Encoded encode(const Body& body) {
   Encoded encoded;
+  encoded.bytes.reserve(body.insts.size() * 4);
+  // A body built outside the backend need not have label_count set, so
+  // the largest label still decides the table size. At run time the
+  // backend has already set the count and this walk only confirms it.
   u32 labels = body.label_count;
   for (const MInst& inst : body.insts) {
     if (inst.label != MInst::NO_LABEL && inst.label >= labels) {

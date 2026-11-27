@@ -432,7 +432,9 @@ base::Result<Body, EmitError> Selector::run() {
   // Blocks need not be laid out in dominance order. Note every alloca
   // register up front so a use in an earlier-laid-out block still marks
   // its vreg as slot-backed when vreg_of first creates it.
+  usize ir_instructions = 0;
   for (const ir::BlockIdx block : function_.blocks) {
+    ir_instructions += storage_.blocks()[block].instrs.size();
     for (const ir::InstructionIdx instr_idx : storage_.blocks()[block].instrs) {
       const ir::Instruction& instr = storage_.instrs()[instr_idx];
       if (instr.op == ir::Opcode::Alloca) {
@@ -440,6 +442,7 @@ base::Result<Body, EmitError> Selector::run() {
       }
     }
   }
+  body_.insts.reserve(ir_instructions * 4 + 8);
   for (const ir::BlockIdx block : function_.blocks) {
     block_labels_[block.idx] = body_.label_count++;
   }

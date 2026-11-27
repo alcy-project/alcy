@@ -175,6 +175,7 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
   // The runtime names the selected bodies reach, which is what this
   // object has to define.
   std::vector<std::string> runtime_names;
+  std::unordered_set<std::string> runtime_name_set;
 
   for (const ir::FunctionIdx index : storage.functions().idx_range()) {
     if (!reachable[index.idx]) {
@@ -205,14 +206,7 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
       // A runtime piece this backend has not written yet is a refusal
       // at the construct that reached it, not an object the link
       // refuses over a name nobody carries.
-      bool already = false;
-      for (const std::string& known : runtime_names) {
-        if (known == name) {
-          already = true;
-          break;
-        }
-      }
-      if (!already) {
+      if (runtime_name_set.insert(name).second) {
         runtime_names.push_back(name);
       }
     }
@@ -270,12 +264,9 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
   }
 
   // The env wrappers call alcy_env_find; make sure it is emitted too.
-  const bool uses_env = std::find(runtime_names.begin(), runtime_names.end(),
-                                  "alcy_env_exists") != runtime_names.end() ||
-                        std::find(runtime_names.begin(), runtime_names.end(),
-                                  "alcy_env_get") != runtime_names.end();
-  if (uses_env && std::find(runtime_names.begin(), runtime_names.end(),
-                            "alcy_env_find") == runtime_names.end()) {
+  const bool uses_env = runtime_name_set.contains("alcy_env_exists") ||
+                        runtime_name_set.contains("alcy_env_get");
+  if (uses_env && runtime_name_set.insert("alcy_env_find").second) {
     runtime_names.push_back("alcy_env_find");
   }
 
@@ -597,17 +588,11 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
   // The process arguments the entry wrapper saved, in the third section.
   // Only an object that actually uses the argument runtime carries them,
   // so a library that never asks for args leaves these to the binary.
-  const bool uses_args =
-      std::find(runtime_names.begin(), runtime_names.end(), "alcy_arg") !=
-          runtime_names.end() ||
-      std::find(runtime_names.begin(), runtime_names.end(), "alcy_arg_count") !=
-          runtime_names.end() ||
-      std::find(runtime_names.begin(), runtime_names.end(), "alcy_env_find") !=
-          runtime_names.end() ||
-      std::find(runtime_names.begin(), runtime_names.end(),
-                "alcy_env_exists") != runtime_names.end() ||
-      std::find(runtime_names.begin(), runtime_names.end(), "alcy_env_get") !=
-          runtime_names.end();
+  const bool uses_args = runtime_name_set.contains("alcy_arg") ||
+                         runtime_name_set.contains("alcy_arg_count") ||
+                         runtime_name_set.contains("alcy_env_find") ||
+                         runtime_name_set.contains("alcy_env_exists") ||
+                         runtime_name_set.contains("alcy_env_get");
   if (request.emit_entry || uses_args) {
     object::Section globals{.name = ".data",
                             .bytes = std::vector<u8>(24, 0),

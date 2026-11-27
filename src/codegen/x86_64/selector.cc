@@ -498,7 +498,9 @@ base::Result<Body, codegen::EmitError> Selector::run() {
   // later than the one that projects it (block order is not control
   // flow order). Gather every alloca's hint up front so a projection
   // in an earlier block still knows what its base points at.
+  usize ir_instructions = 0;
   for (const ir::BlockIdx block_idx : function_.blocks) {
+    ir_instructions += storage_.blocks()[block_idx].instrs.size();
     for (const ir::InstructionIdx instr_idx :
          storage_.blocks()[block_idx].instrs) {
       const ir::Instruction& instr = storage_.instrs()[instr_idx];
@@ -507,6 +509,7 @@ base::Result<Body, codegen::EmitError> Selector::run() {
       }
     }
   }
+  body_.insts.reserve(ir_instructions * 4 + 8);
 
   // Every block the body carries gets a label, whether or not a branch
   // names it: a block's first instruction is where its label sits, and

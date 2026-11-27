@@ -60,12 +60,11 @@ void write_code_entry(const FuncBody& body, BinaryWriter& out) {
     locals.u32_leb(1);
     write_val_type(locals, local);
   }
-  BinaryWriter entry;
-  entry.bytes(locals.bytes());
-  entry.bytes(body.code.bytes());
-  entry.byte(0x0B);  // The function's closing `end`.
-  out.u32_leb(static_cast<u32>(entry.size()));
-  out.bytes(entry.bytes());
+  const u32 size = static_cast<u32>(locals.size() + body.code.size() + 1);
+  out.u32_leb(size);
+  out.bytes(locals.bytes());
+  out.bytes(body.code.bytes());
+  out.byte(0x0B);  // The function's closing `end`.
 }
 
 }  // namespace

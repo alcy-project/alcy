@@ -56,6 +56,25 @@ bool widen_far_jumps(Body& body) {
     u32 target = 0;
   };
   std::vector<Widened> widened;
+  const auto is_branch = [](MOp op) {
+    return op == MOp::Beq || op == MOp::Bne || op == MOp::Blt ||
+           op == MOp::Bge || op == MOp::Bltu || op == MOp::Bgeu;
+  };
+  // A body with no label-carrying jump needs no layout at all. Most
+  // functions are this shape, and the widening loop is otherwise a
+  // full walk per expansion.
+  const bool has_jump =
+      std::any_of(body.insts.begin(), body.insts.end(), [&](const MInst& inst) {
+        if (!is_branch(inst.op) && inst.op != MOp::Jal) {
+          return false;
+        }
+        const u32 label_op = is_branch(inst.op) ? 2 : 1;
+        return inst.count > label_op &&
+               std::holds_alternative<Label>(inst.at(label_op));
+      });
+  if (!has_jump) {
+    return true;
+  }
   const u32 max_passes = static_cast<u32>(body.insts.size()) + 8;
   for (u32 pass = 0; pass < max_passes; ++pass) {
     u32 max_label = body.label_count;
@@ -77,9 +96,7 @@ bool widen_far_jumps(Body& body) {
     bool changed = false;
     for (u32 i = 0; i < body.insts.size(); ++i) {
       MInst& inst = body.insts[i];
-      const bool branch = inst.op == MOp::Beq || inst.op == MOp::Bne ||
-                          inst.op == MOp::Blt || inst.op == MOp::Bge ||
-                          inst.op == MOp::Bltu || inst.op == MOp::Bgeu;
+      const bool branch = is_branch(inst.op);
       const u32 label_op = branch ? 2 : 1;
       const Label* label =
           (inst.op == MOp::Jal || branch) && inst.count > label_op

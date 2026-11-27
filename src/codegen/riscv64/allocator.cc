@@ -36,6 +36,7 @@ bool needs_register_operands(const MOp op) {
 
 void allocate(Body& body, const Frame& frame) {
   std::vector<MInst> out;
+  out.reserve(body.insts.size() + 8);
   const auto push = [&](MInst inst) { out.push_back(inst); };
   // A label names the start of an MInst. When an instruction expands to
   // several words, attach it to the first one so a jump cannot skip the
