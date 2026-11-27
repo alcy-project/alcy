@@ -24,8 +24,6 @@
 
 namespace analyzer {
 
-// A module tree handed to check_package failed structural verification.
-
 // Name namespaces. Structs and enums occupy Type and Value alike
 // (the type and its constructors); functions, statics, and constants
 // occupy Value; submodules occupy Module.

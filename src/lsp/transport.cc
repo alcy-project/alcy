@@ -4,6 +4,7 @@
 #include "lsp/transport.h"
 
 #include <cerrno>
+#include <limits>
 #include <span>
 #include <string>
 #include <string_view>
@@ -132,13 +133,19 @@ bool Transport::read_message(std::string* out) {
       return false;
     }
   }
-  if (!ensure(header.header_length + header.content_length)) {
+  if (header.content_length >
+      std::numeric_limits<usize>::max() - header.header_length) {
+    failed_ = true;
+    return false;
+  }
+  const usize total = header.header_length + header.content_length;
+  if (!ensure(total)) {
     failed_ = true;
     return false;
   }
   const std::string_view view = available();
   out->assign(view.data() + header.header_length, header.content_length);
-  start_ += header.header_length + header.content_length;
+  start_ += total;
   return true;
 }
 

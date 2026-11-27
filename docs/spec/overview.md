@@ -55,7 +55,8 @@ checkable contracts here.
   package declares its own flags would make every consumer a different
   program. Optional capability is selected as separate packages, or
   paid for always.
-- Unsafe code, raw pointers, FFI (reserved; see `ffi.md`). The typed
+- Unsafe code, raw pointers, FFI (shipped through the Bootstrap path;
+  see `ffi.md`). The typed
   heap intrinsics are the one place pointers exist: they are checked
   against the intrinsic set's canonical shapes, and user code reaches
   elements only through a container that owns the bounds check.
