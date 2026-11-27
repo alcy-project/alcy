@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "base/hash.h"
+#include "config/build_config.h"
 #include "fingerprint/fingerprint.h"
 #include "fpag/base/numeric.h"
 #include "fpag/io/io_util.h"
@@ -26,11 +27,11 @@
 
 namespace {
 
-// Both spellings separate on Windows; a backslash is an ordinary
-// character anywhere else, where splitting on it too only revisits a
-// name create_directory refuses.
+// A backslash separates only on Windows. Elsewhere it is an ordinary
+// filename byte, and splitting on it would create directories the
+// caller never named.
 bool is_separator(char ch) {
-  return ch == '/' || ch == '\\';
+  return ch == '/' || (BUILD_FLAG(IS_OS_WIN) && ch == '\\');
 }
 
 // Creates every level of `dir`, best-effort and silent: a cache the
